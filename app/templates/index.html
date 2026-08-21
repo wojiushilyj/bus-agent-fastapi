@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>公交文旅潮汐客流预测与弹性调度智能体 · 调度指挥中心原型</title>
+<style>
+  :root{
+    --bg:#eef1f6; --panel:#ffffff; --ink:#1f2d3d; --sub:#5b6b7c;
+    --brand:#1e6fff; --brand2:#00b386; --warn:#ff7a45; --danger:#f5222d;
+    --line:#e3e9f1; --soft:#eef4fc; --purple:#7c4dff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:"Microsoft YaHei","PingFang SC",sans-serif;}
+  body{background:var(--bg);color:var(--ink);}
+  header{background:linear-gradient(90deg,#1e6fff,#00b386);color:#fff;padding:14px 22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  header h1{font-size:18px;font-weight:600;}
+  header .tag{font-size:12px;background:rgba(255,255,255,.2);padding:4px 10px;border-radius:20px;}
+  .subnav{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:9px 16px;display:flex;gap:16px;z-index:20;flex-wrap:wrap;}
+  .subnav a{font-size:13px;color:var(--sub);text-decoration:none;}
+  .subnav a:hover{color:var(--brand);}
+  main{padding:18px;max-width:1240px;margin:0 auto;}
+  .score{font-size:11px;background:var(--soft);color:var(--brand);padding:2px 9px;border-radius:10px;margin-left:8px;font-weight:400;white-space:nowrap;}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;scroll-margin-top:54px;}
+  .panel h3{font-size:16px;margin-bottom:14px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;}
+  .panel h3::before{content:"";width:4px;height:17px;background:var(--brand);border-radius:2px;margin-right:4px;}
+  .cards{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:16px;}
+  .kpi{background:linear-gradient(180deg,#fff,#fbfdff);border:1px solid var(--line);border-radius:12px;padding:13px 12px;}
+  .kpi .v{font-size:22px;font-weight:700;color:var(--brand);}
+  .kpi .l{font-size:11px;color:var(--sub);margin-top:4px;line-height:1.4;}
+  .kpi.warn .v{color:var(--warn);} .kpi.danger .v{color:var(--danger);} .kpi.green .v{color:var(--brand2);}
+  .runbar{display:flex;align-items:center;gap:12px;background:var(--soft);border-radius:10px;padding:12px 14px;margin-bottom:12px;flex-wrap:wrap;}
+  #runBtn{background:var(--brand);color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;}
+  #runBtn:disabled{opacity:.55;cursor:default;}
+  #dispatchBtn{background:var(--danger);color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;}
+  #dispatchBtn:disabled{opacity:.4;cursor:default;}
+  #resetBtn{background:#fff;color:var(--sub);border:1px solid var(--line);padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;}
+  #runStatus{font-size:13px;color:var(--sub);flex:1;min-width:200px;}
+  .ctrlbar{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px;flex-wrap:wrap;font-size:13px;color:var(--sub);}
+  .ctrlbar label{font-weight:600;color:var(--ink);}
+  .ctrlbar select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink);background:#fff;}
+  #timeSlider{width:210px;accent-color:var(--brand);cursor:pointer;}
+  #hourLabel{font-weight:700;color:var(--brand);min-width:48px;font-size:14px;}
+  #hourStat{margin-left:auto;font-size:12px;color:var(--sub);}
+  #hourStat b{color:var(--brand);}
+  .stepper{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+  .st{flex:1;min-width:110px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;display:flex;align-items:center;gap:9px;background:#fff;transition:.3s;}
+  .st .n{width:24px;height:24px;border-radius:50%;background:var(--line);color:var(--sub);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;}
+  .st .t{font-size:12.5px;color:var(--sub);font-weight:600;}
+  .st.on{border-color:var(--brand);box-shadow:0 0 0 3px rgba(30,111,255,.10);}
+  .st.on .n{background:var(--brand);color:#fff;}
+  .st.on .t{color:var(--brand);}
+  .st.done .n{background:var(--brand2);color:#fff;}
+  .cmd{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;}
+  .mapwrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:linear-gradient(180deg,#f4f9ff,#eef6ff);}
+  #map{width:100%;height:auto;display:block;}
+  .maphead{position:absolute;top:10px;left:12px;font-size:13px;font-weight:700;color:var(--ink);background:rgba(255,255,255,.8);padding:4px 10px;border-radius:8px;}
+  .mapnote{position:absolute;bottom:8px;right:10px;font-size:10px;color:var(--sub);background:rgba(255,255,255,.7);padding:2px 7px;border-radius:6px;}
+  .maplegend{position:absolute;top:10px;right:12px;background:rgba(255,255,255,.86);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--sub);line-height:1.7;}
+  .maplegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+  .panel-right{display:flex;flex-direction:column;gap:12px;}
+  .box-r{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fcfdff;}
+  .box-r h4{font-size:13.5px;margin-bottom:9px;display:flex;align-items:center;gap:6px;}
+  .box-r h4::before{content:"";width:3px;height:14px;background:var(--brand);border-radius:2px;}
+  .alert{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:var(--soft);margin-bottom:7px;font-size:12.5px;}
+  .alert .lv{font-size:11px;font-weight:700;padding:1px 8px;border-radius:8px;color:#fff;flex:none;}
+  .lv-h{background:var(--danger);} .lv-m{background:var(--warn);}
+  .alert .ln{font-weight:600;color:var(--ink);}
+  .alert .lt{color:var(--sub);font-size:11.5px;margin-left:auto;text-align:right;}
+  .act{display:flex;align-items:flex-start;gap:9px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:7px;background:#fff;}
+  .act .badge{font-size:10px;background:var(--purple);color:#fff;padding:1px 7px;border-radius:7px;flex:none;margin-top:1px;}
+  .act .at{font-size:12.5px;font-weight:600;color:var(--ink);}
+  .act .ad{font-size:11px;color:var(--sub);margin-top:2px;}
+  .act .basis{font-size:11px;color:#5b6b7c;margin-top:5px;background:var(--soft);border-left:3px solid var(--brand2);padding:5px 8px;border-radius:6px;line-height:1.5;}
+  .act .basis b{color:var(--ink);}
+  .act .ae{font-size:11.5px;color:var(--brand2);font-weight:700;margin-left:auto;text-align:right;flex:none;}
+  .empty{font-size:12px;color:#9aa7b5;padding:14px 4px;text-align:center;}
+  .fc-top{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
+  .chip{cursor:pointer;font-size:12px;padding:5px 11px;border:1px solid var(--line);border-radius:8px;color:var(--sub);background:var(--soft);}
+  .chip.active{background:var(--brand2);color:#fff;border-color:var(--brand2);}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--sub);margin-bottom:6px;flex-wrap:wrap;}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+  .tip{font-size:12px;color:var(--sub);margin-top:10px;line-height:1.7;}
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;}
+  .agent{flex:1;min-width:130px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;position:relative;}
+  .agent .ic{font-size:22px;}
+  .agent h4{font-size:13px;margin:6px 0 4px;}
+  .agent p{font-size:11px;color:var(--sub);line-height:1.5;}
+  .pill{display:inline-block;background:var(--soft);color:var(--brand);font-size:11px;padding:2px 8px;border-radius:10px;margin:2px;}
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .pain{background:var(--soft);border-radius:10px;padding:14px;font-size:13px;line-height:1.8;color:var(--ink);}
+  .pain b{color:var(--danger);}
+  .layer{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px;}
+  .layer .ly{background:var(--soft);border-radius:10px;padding:12px;text-align:center;}
+  .layer .ly .t{font-size:13px;font-weight:600;color:var(--brand);}
+  .layer .ly .d{font-size:11px;color:var(--sub);margin-top:5px;line-height:1.5;}
+  .land{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .land .box{border:1px solid var(--line);border-radius:10px;padding:14px;}
+  .land .box h4{font-size:14px;margin-bottom:8px;}
+  .land .box ul{margin:0;padding-left:18px;font-size:12px;color:var(--sub);line-height:1.8;}
+  .foot{text-align:center;color:var(--sub);font-size:12px;padding:18px;}
+  .cmpbar{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:12px;flex-wrap:wrap;font-size:13px;color:var(--sub);}
+  .cmpbar label{font-weight:600;color:var(--ink);}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .seg button{border:none;background:#fff;padding:7px 12px;font-size:12.5px;color:var(--sub);cursor:pointer;}
+  .seg button.active{background:var(--brand);color:#fff;}
+  .cmp-tip{font-size:11.5px;color:var(--sub);margin-left:auto;max-width:400px;line-height:1.5;}
+  .cmp-tip b{color:var(--brand2);}
+  .cmp{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#fff5f5,#f0fcf4);border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:13px;flex-wrap:wrap;}
+  .cmp .big{font-size:19px;font-weight:700;}
+  .cmp .from{color:var(--danger);} .cmp .to{color:var(--brand2);} .cmp .arrow{color:var(--sub);font-size:12px;}
+  .cmp b{color:var(--ink);}
+  .loadlegend{position:absolute;bottom:8px;left:12px;background:rgba(255,255,255,.9);border-radius:8px;padding:6px 9px;font-size:10px;color:var(--sub);display:none;z-index:5;}
+  .loadlegend .bar{height:9px;width:140px;background:linear-gradient(90deg,#1ec96b,#7bd13a,#ffd54f,#ff9f43,#f5222d);border-radius:5px;margin:4px 0 2px;}
+  .loadlegend .scale{display:flex;justify-content:space-between;width:140px;font-size:9px;}
+  #exportBtn{background:#fff;color:var(--brand);border:1px solid var(--brand);padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;}
+  #exportBtn:hover{background:var(--soft);}
+  #printSheet{display:none;background:#fff;color:#1f2d3d;font-family:"Microsoft YaHei","PingFang SC",sans-serif;padding:0;}
+  .ps-head{border-bottom:3px solid #1e6fff;padding-bottom:10px;margin-bottom:14px;}
+  .ps-title{font-size:20px;font-weight:700;}
+  .ps-sub{font-size:12px;color:#5b6b7c;letter-spacing:1px;margin-top:2px;}
+  .ps-meta{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;background:#f4f8ff;border:1px solid #e3e9f1;border-radius:8px;padding:10px 12px;margin-bottom:16px;}
+  .ps-meta b{color:#1e6fff;}
+  #printSheet h2{font-size:15px;margin:16px 0 9px;border-left:4px solid #1e6fff;padding-left:8px;}
+  .ps-alert{list-style:none;padding:0;margin:0;}
+  .ps-alert li{display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px dashed #e3e9f1;font-size:13px;}
+  .ps-tag{font-size:11px;font-weight:700;padding:1px 8px;border-radius:8px;color:#fff;flex:none;}
+  .ps-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .ps-tbl th,.ps-tbl td{border:1px solid #d7dee8;padding:7px 9px;text-align:left;vertical-align:top;}
+  .ps-tbl th{background:#eef4fc;font-weight:600;}
+  .ps-tbl .eff{color:#00b386;font-weight:700;}
+  .ps-foot{margin-top:22px;font-size:11px;color:#9aa7b5;text-align:center;border-top:1px solid #e3e9f1;padding-top:10px;}
+  .tooltrace{display:flex;align-items:center;gap:12px;background:#0f1f3a;color:#e8f0ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;}
+  .tooltrace .tt-title{font-size:12.5px;font-weight:700;color:#7fd1ff;flex:none;}
+  .tt-log{flex:1;display:flex;flex-direction:column;gap:3px;max-height:88px;overflow-y:auto;font-family:Consolas,"Courier New",monospace;}
+  .tt-line{opacity:0;transform:translateY(4px);animation:ttIn .4s ease forwards;display:flex;align-items:center;gap:7px;}
+  .tt-line .tt-dot{width:7px;height:7px;border-radius:50%;background:#39d98a;flex:none;box-shadow:0 0 6px #39d98a;}
+  @keyframes ttIn{to{opacity:1;transform:translateY(0);}}
+  .tt-empty{color:#6b86b3;font-family:"Microsoft YaHei",sans-serif;}
+  /* ===== 大屏 / 全屏指挥模式 ===== */
+  #fullBtn{background:#0f1f3a;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;}
+  #fullBtn:hover{background:#173056;}
+  .fs-exit{display:none;position:fixed;top:14px;right:18px;z-index:80;background:rgba(15,31,58,.92);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  body.fs .fs-exit{display:block;}
+  body.fs header,body.fs .subnav,body.fs .foot,body.fs main>section:not(#demo){display:none!important;}
+  body.fs main{max-width:none;padding:0;margin:0;}
+  body.fs #demo{height:100vh;max-height:100vh;overflow:hidden;display:flex;flex-direction:column;margin:0;border:none;border-radius:0;padding:14px 18px;}
+  body.fs #forecastPanel{display:none!important;}
+  body.fs .cmd{grid-template-columns:2.15fr 1fr;flex:1;min-height:0;margin-bottom:0;}
+  body.fs .mapwrap{height:100%;}
+  body.fs #map{height:100%;width:100%;}
+  body.fs .panel-right{overflow:auto;}
+  body.fs .cards{margin-bottom:8px;}
+  body.fs .runbar,body.fs .ctrlbar,body.fs .cmpbar,body.fs .stepper,body.fs .tooltrace{margin-bottom:8px;}
+  @media print{
+    body{background:#fff;}
+    body > *:not(#printSheet){display:none!important;}
+    #printSheet{display:block!important;}
+    @page{size:A4;margin:14mm;}
+  }
+  @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr);}.cmd{grid-template-columns:1fr;}.twocol,.land,.layer{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🚌 公交文旅潮汐客流预测与弹性调度智能体</h1>
+  <span class="tag">调度指挥中心原型 · 单页演示版（模拟数据）</span>
+</header>
+<nav class="subnav">
+  <a href="#demo">▸ 调度指挥中心</a>
+  <a href="#arch">多智能体架构</a>
+  <a href="#value">应用价值</a>
+  <a href="#tech">技术架构</a>
+  <a href="#landing">落地推广</a>
+</nav>
+<main>
+
+  <!-- ===== 调度指挥中心（核心）===== -->
+  <section class="panel" id="demo">
+    <h3>公交文旅调度指挥中心 <span class="score">作品成熟度 15 · 技术创新性 20 · 应用价值 20</span></h3>
+
+    <!-- 头条指标 -->
+    <div class="cards">
+      <div class="kpi"><div class="v">38.6万</div><div class="l">今日预测文旅接驳客流</div></div>
+      <div class="kpi warn"><div class="v" id="kpiAlert">—</div><div class="l">当前时刻拥堵预警线路</div></div>
+      <div class="kpi green"><div class="v">+42%</div><div class="l">高峰疏运能力提升</div></div>
+      <div class="kpi green"><div class="v">-18%</div><div class="l">线路满载率下降</div></div>
+      <div class="kpi"><div class="v" id="kpiPlan">0 项</div><div class="l">已下发调度指令</div></div>
+      <div class="kpi"><div class="v">11 个</div><div class="l">覆盖景区/接驳通道</div></div>
+    </div>
+
+    <!-- 推演控制 -->
+    <div class="runbar">
+      <button id="runBtn">▶ 运行智能体推演</button>
+      <button id="dispatchBtn" disabled>⚡ 一键下发调度指令</button>
+      <button id="resetBtn">↺ 重置</button>
+      <button id="exportBtn">🖨 导出调度指令单</button>
+      <button id="fullBtn">🖥 全屏指挥</button>
+      <span id="runStatus">点击「运行智能体推演」观看全链路；或直接拖动下方时刻滑块、切换场景自主探查</span>
+    </div>
+
+    <!-- 时刻 + 场景控制（调度员自主探查） -->
+    <div class="ctrlbar">
+      <label>场景</label>
+      <select id="scSel">
+        <option value="normal">平日</option>
+        <option value="peak" selected>旅游高峰日</option>
+        <option value="event">大型活动日</option>
+        <option value="burst">突发大客流</option>
+      </select>
+      <label style="margin-left:6px;">时刻</label>
+      <input type="range" id="timeSlider" min="0" max="23" value="9">
+      <span id="hourLabel">09:00</span>
+      <span id="hourStat"></span>
+    </div>
+
+    <!-- 无/有智能体对比：线路满载率色阶 -->
+    <div class="cmpbar">
+      <label>满载率视角</label>
+      <div class="seg" id="cmpSeg">
+        <button data-m="off" class="active">原色线网</button>
+        <button data-m="before">不干预·传统排班</button>
+        <button data-m="after">智能体干预后</button>
+      </div>
+      <span class="cmp-tip">色阶越红=线路满载率越高（越易超载）；切到“智能体干预后”，地图整条线转绿，直接体现<b>降风险</b>价值（应用价值 20 分）</span>
+    </div>
+    <div class="cmp" id="cmpBanner" style="display:none">
+      <span>📉 满载率对比（最紧张线路 <b id="cmpWorst">—</b>）：</span>
+      <span class="big from" id="cmpBefore">95%</span>
+      <span class="arrow">── 智能体弹性调度 ──▶</span>
+      <span class="big to" id="cmpAfter">77%</span>
+      <span id="cmpDelta"></span>
+    </div>
+
+    <!-- 五步推演进度 -->
+    <div class="stepper">
+      <div class="st" id="st1"><div class="n">1</div><div class="t">感知</div></div>
+      <div class="st" id="st2"><div class="n">2</div><div class="t">预测</div></div>
+      <div class="st" id="st3"><div class="n">3</div><div class="t">决策</div></div>
+      <div class="st" id="st4"><div class="n">4</div><div class="t">执行</div></div>
+      <div class="st" id="st5"><div class="n">5</div><div class="t">评估</div></div>
+    </div>
+
+    <!-- 工具调用轨迹（推演时动态闪出） -->
+    <div class="tooltrace">
+      <span class="tt-title">🔧 工具调用轨迹</span>
+      <div class="tt-log" id="ttLog"><span class="tt-empty" id="ttEmpty">运行推演时，此处实时显示智能体调用的外部系统与 API</span></div>
+    </div>
+
+    <!-- 指挥中心：地图 + 决策面板 -->
+    <div class="cmd">
+      <div class="mapwrap">
+        <div class="maphead">桂林—阳朔 文旅公交线网图</div>
+        <div class="maplegend">
+          <div><i style="background:#1e6fff"></i>旅游专线1（桂林）</div>
+          <div><i style="background:#00b386"></i>阳朔环线</div>
+          <div><i style="background:#ff7a45"></i>跨区直通车</div>
+          <div><i style="background:#7c4dff"></i>接驳摆渡</div>
+          <div><i style="background:#f5222d"></i>拥堵范围</div>
+        </div>
+        <div class="loadlegend" id="loadLegend">
+          <div>线路满载率色阶</div>
+          <div class="bar"></div>
+          <div class="scale"><span>60%</span><span>80%</span><span>100%</span></div>
+        </div>
+        <svg id="map" viewBox="0 0 680 470" width="100%"></svg>
+        <div class="mapnote">示意图（非地理精确），用于演示调度决策可视化</div>
+      </div>
+
+      <div class="panel-right">
+        <div class="box-r">
+          <h4>① 实时拥堵预警 <span class="score" style="margin-left:auto;font-size:10px;">预测智能体</span></h4>
+          <div id="alertList"><div class="empty">拖动时刻滑块 / 切换场景，查看各时刻实时拥堵预警</div></div>
+        </div>
+        <div class="box-r">
+          <h4>② 智能体推荐调度指令 <span class="score" style="margin-left:auto;font-size:10px;">决策智能体</span></h4>
+          <div id="actList"><div class="empty">运行推演后，此处显示可一键下发的调度方案</div></div>
+        </div>
+        <div class="box-r">
+          <h4>③ 执行与闭环 <span class="score" style="margin-left:auto;font-size:10px;">执行/评估智能体</span></h4>
+          <div id="execInfo" class="empty">指令下发后，地图线路高亮、车辆动态运行，系统回测评估效果</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 客流预测曲线（动态绘制 + 当前时刻游标） -->
+    <div class="panel" id="forecastPanel" style="margin:16px 0 0;background:var(--soft);">
+      <h3 style="font-size:14px;">分景区 24h 潮汐客流预测 <span class="score">点击地图站点或下方按钮查看</span></h3>
+      <div class="fc-top" id="spotChips"></div>
+      <div id="spotInfo" style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap;"></div>
+      <div class="legend"><span><i style="background:#1e6fff"></i>旅游高峰日</span><span><i style="background:#00b386"></i>平日</span><span><i style="background:#ff7a45"></i>大型活动日</span><span style="color:var(--ink);font-weight:600;">▏当前时刻游标</span></div>
+      <svg id="chart-forecast" viewBox="0 0 640 280" width="100%"></svg>
+    </div>
+  </section>
+
+  <!-- ===== 多智能体架构 ===== -->
+  <section class="panel" id="arch">
+    <h3>多智能体协同架构 <span class="score">技术创新性 20 · 作品成熟度 15</span></h3>
+    <div class="flow">
+      <div class="agent"><div class="ic">📡</div><h4>感知智能体</h4><p>汇聚公交运营、景区、枢纽、活动、环境 7 大类 30+ 项多源数据（聚合匿名化）</p></div>
+      <div class="arrow">→</div>
+      <div class="agent"><div class="ic">🔮</div><h4>预测智能体</h4><p>大模型时序预测，输出分时/分线/分站潮汐客流</p></div>
+      <div class="arrow">→</div>
+      <div class="agent"><div class="ic">🧠</div><h4>决策智能体</h4><p>生成弹性调度方案，工具调用排班/运力系统</p></div>
+      <div class="arrow">→</div>
+      <div class="agent"><div class="ic">⚙️</div><h4>执行智能体</h4><p>下发调度指令至车载终端与调度中心</p></div>
+      <div class="arrow">↺</div>
+      <div class="agent"><div class="ic">📊</div><h4>评估智能体</h4><p>仿真回测与效果评估，闭环优化</p></div>
+    </div>
+    <div style="margin-top:14px;">
+      <span class="pill">多智能体协同</span><span class="pill">自主决策</span><span class="pill">工具调用</span><span class="pill">外部系统交互</span><span class="pill">感知-规划-决策-执行</span><span class="pill">可解释AI</span><span class="pill">闭环优化</span>
+    </div>
+    <div class="tip">技术亮点：以大语言模型为推理中枢，多智能体分工协同、自主决策并调用外部业务系统，正是评审细则明确鼓励的智能体技术路线。</div>
+  </section>
+
+  <!-- ===== 应用价值 ===== -->
+  <section class="panel" id="value">
+    <h3>行业痛点与应用价值 <span class="score">应用价值 20</span></h3>
+    <div class="twocol">
+      <div class="pain">
+        <b>行业痛点：</b><br>
+        1. 旅游城市客流"潮汐化"显著，节假日与团队游集中到达，公交刚性运力难匹配；<br>
+        2. 景区—市区、市区—阳朔间接驳通道呈<b>双向潮汐</b>，传统固定排班无法动态响应；<br>
+        3. 多源数据孤岛，缺乏统一预测与协同调度手段；<br>
+        4. 大型活动/应急保障靠经验，响应慢、易超载。
+      </div>
+      <div class="pain">
+        <b>应用价值：</b><br>
+        1. <b>提效率</b>：高峰疏运能力 +42%，游客平均候车 -6.5min；<br>
+        2. <b>降风险</b>：线路满载率 -18%，超载预警前置；<br>
+        3. <b>优服务</b>：调度决策者一眼掌握拥堵与运力，指挥更高效；<br>
+        4. <b>可复制</b>：方案可推广至同类型世界级旅游城市（含东盟）。
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 技术架构 ===== -->
+  <section class="panel" id="tech">
+    <h3>技术架构与系统设计 <span class="score">方案完整度 15</span></h3>
+    <div class="layer">
+      <div class="ly"><div class="t">应用层</div><div class="d">调度指挥中心大屏 / 司机终端 / 公众出行服务</div></div>
+      <div class="ly"><div class="t">智能体层</div><div class="d">感知·预测·决策·执行·评估 多智能体协同</div></div>
+      <div class="ly"><div class="t">模型层</div><div class="d">大模型时序预测 + 时空图神经网络</div></div>
+      <div class="ly"><div class="t">数据层</div><div class="d">公交运营/景区/枢纽/活动/环境 7 大类多源接入（聚合匿名化）</div></div>
+    </div>
+    <div class="tip">实施路径：多源数据治理 → 客流预测模型训练 → 多智能体编排 → 调度系统集成 → 桂林试点 → 东盟推广。需求分析、架构、设计、实施路径完整闭环。</div>
+  </section>
+
+  <!-- ===== 落地推广 ===== -->
+  <section class="panel" id="landing">
+    <h3>落地可行性：广西试点 + 东盟推广 <span class="score">落地可行性 20</span></h3>
+    <div class="land">
+      <div class="box">
+        <h4>🏙️ 广西落地（优先承诺）</h4>
+        <ul>
+          <li>依托桂林"世界级旅游城市"先行试点</li>
+          <li>协同北部湾投资集团、平陆运河集团等本地交通企业</li>
+          <li>已签《成果落地广西优先承诺书》</li>
+          <li>落地关键点在于<b>跨部门数据打通</b>（交通/文旅/景区/枢纽），而非模型能力</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h4>🌏 海外（东盟）推广潜力</h4>
+        <ul>
+          <li>对标下龙湾、清迈、巴厘等旅游城市潮汐交通问题</li>
+          <li>对接中国—东盟人工智能应用合作中心及协办东盟高校</li>
+          <li>已准备《海外推广意向书》参与智能体大赛复议</li>
+          <li>方案轻量、可复制，适配不同政策法规与基础设施</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+</main>
+<div class="foot">桂林市规划设计研究院 · 2026“A超”交通创新大赛 国际赛道（创新赛道）参赛原型 · 调度指挥中心视角 · 模拟数据仅用于演示</div>
+<button class="fs-exit" id="fsExit">✕ 退出全屏指挥</button>
+
+<!-- 调度指令单（仅打印/导出PDF时显示） -->
+<div id="printSheet"></div>
+
+<script>
+const SVGNS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function pad2(h){return (h<10?'0':'')+h;}
+
+// ===== 场景 =====
+const SCENARIOS={
+  normal:{name:'平日',cong:0.7},
+  peak:{name:'旅游高峰日',cong:1.0},
+  event:{name:'大型活动日',cong:1.25},
+  burst:{name:'突发大客流',cong:1.15}
+};
+let hour=9, scenario='peak';
+
+// ===== 线网图数据（示意图坐标）=====
+const SPOTS=[
+  {id:'xs',name:'象山景区',x:205,y:100,g:'gl'},
+  {id:'ljs',name:'两江四湖·夜游',x:300,y:135,g:'gl'},
+  {id:'ljj',name:'漓江/磨盘山码头',x:375,y:78,g:'gl'},
+  {id:'ldy',name:'芦笛岩',x:120,y:72,g:'gl'},
+  {id:'qx',name:'七星景区',x:405,y:165,g:'gl'},
+  {id:'wj',name:'靖江王城·东西巷',x:260,y:190,g:'gl'},
+  {id:'xj',name:'阳朔西街',x:330,y:375,g:'ys'},
+  {id:'ylh',name:'遇龙河',x:240,y:408,g:'ys'},
+  {id:'sj',name:'十里画廊',x:430,y:388,g:'ys'},
+  {id:'xp',name:'兴坪古镇',x:485,y:428,g:'ys'}
+];
+const LINES=[
+  {id:'L1',name:'旅游专线1',color:'#1e6fff',pts:[[120,72],[205,100],[300,135],[260,190],[405,165]]},
+  {id:'L2',name:'阳朔环线',color:'#00b386',pts:[[330,375],[430,388],[485,428],[240,408],[330,375]]},
+  {id:'L3',name:'跨区直通车',color:'#ff7a45',pts:[[375,78],[360,160],[345,245],[335,310],[330,375]]},
+  {id:'L4',name:'接驳摆渡',color:'#7c4dff',pts:[[330,375],[288,392],[240,408]]}
+];
+// 拥堵剖面：各站点峰值时刻与强度
+const CONG_PROFILES=[
+  {spot:'xs',line:'旅游专线1',peaks:[[11,1],[15,0.92]],baseR:40,note:'双峰站台滞留'},
+  {spot:'xj',line:'阳朔环线',peaks:[[21,1]],baseR:44,note:'夜场返程'},
+  {spot:'ljj',line:'跨区直通车',peaks:[[9,1],[10,0.9]],baseR:30,note:'去程集中'},
+  {spot:'ljs',line:'旅游专线1',peaks:[[20,1]],baseR:30,note:'夜游散场'}
+];
+const ACTIONS=[
+  {type:'区间车',title:'象山—日月双塔 增开区间车',detail:'发车间隔 12→6min，覆盖高饱和段',effect:'+4200 人/时',line:'L1',basis:'象山站 站台滞留 <b>920 人</b>（≥800 阈值）且 旅游专线1 满载率 <b>91%</b>（≥85%）→ 触发增开区间车'},
+  {type:'接驳车',title:'西街—遇龙河 接驳摆渡',detail:'截流夜游返程客流，缓解主线',effect:'分流 2600 人/时',line:'L4',basis:'阳朔西街 夜场客流 <b>2150 人/时</b>，站台滞留 <b>880 人</b>（≥800）且 阳朔环线 满载率 <b>88%</b>（≥85%）→ 触发接驳摆渡'},
+  {type:'快线',title:'桂林↔阳朔 跨区快线',detail:'按去程/回程潮汐双向加开',effect:'跨区 +38%',line:'L3',basis:'跨区直通车 去程 09:00 满载率 <b>94%</b>（≥85%）→ 按去/回程潮汐双向加开快线'},
+  {type:'车辆预置',title:'热点场站 车辆预置+充电',detail:'新能源提前就位，避免高峰脱班',effect:'就绪 100%',line:null,basis:'热点场站 预测 11:00 集中到发，运力缺口 <b>12 标台</b> → 提前预置 + 充电，避免高峰脱班'}
+];
+const spotById={}; SPOTS.forEach(s=>spotById[s.id]=s);
+
+// 模拟 24h 客流形状
+function shape(peaks,base=4,scale=1){const a=new Array(24).fill(base);peaks.forEach(([h,w])=>{for(let i=0;i<24;i++){const d=i-h;a[i]+=w*Math.exp(-(d*d)/6);}});return a.map(v=>Math.round(v*scale));}
+const FC={
+  xs:shape([[11,40],[15,38]]), ljs:shape([[20,55]]), ljj:shape([[9,52],[10,46]]),
+  ldy:shape([[10,30],[11,28]]), qx:shape([[14,25],[15,24]]), wj:shape([[16,28],[20,22]]),
+  xj:shape([[21,60]]), ylh:shape([[10,35],[14,38]]), sj:shape([[13,30],[15,32]]), xp:shape([[11,28],[15,26]])
+};
+function peakH(id){const m={xs:'11:00 / 15:00',ljs:'20:00',ljj:'09:00',ldy:'10:00',qx:'14:00',wj:'16:00',xj:'21:00',ylh:'14:00',sj:'14:00',xp:'15:00'};return m[id];}
+
+// 场景曲线
+function scenCurve(base,sc){
+  if(sc==='normal')return base.slice();
+  if(sc==='peak')return base.map(v=>Math.round(v*1.9));
+  if(sc==='event')return base.map(v=>Math.round(v*(v>10?2.4:1.2)+(v>40?20:0)));
+  return base.map((v,h)=>Math.round(v*1.2+150*Math.exp(-((h-21)*(h-21))/3))); // 突发：夜场陡增
+}
+function congIntensity(p,h,sc){
+  let g=0; p.peaks.forEach(([ph,w])=>{g=Math.max(g,w*Math.exp(-((h-ph)*(h-ph))/5));});
+  let m=SCENARIOS[sc].cong;
+  if(sc==='burst') m*=(h>=19&&h<=23)?1.45:0.55;
+  return Math.min(1,g*m);
+}
+
+// ===== 无/有智能体对比：线路满载率色阶 =====
+const LINE_PROFILES={L1:['xs','ljs'],L2:['xj'],L3:['ljj'],L4:['xj']};
+let compareMode='off';
+function lineLoadBefore(id){let g=0;LINE_PROFILES[id].forEach(sid=>{const p=CONG_PROFILES.find(c=>c.spot===sid);if(p)g=Math.max(g,congIntensity(p,hour,scenario));});return Math.min(1,0.45+g*0.5);}
+function lineLoadAfter(id){return Math.max(0.6,lineLoadBefore(id)-0.20);}
+function lerpColor(c1,c2,t){const p=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];const a=p(c1),b=p(c2);const r=a.map((v,i)=>Math.round(v+(b[i]-v)*t));return '#'+r.map(v=>v.toString(16).padStart(2,'0')).join('');}
+function loadColor(l){const stops=[[0.55,'#1ec96b'],[0.7,'#7bd13a'],[0.8,'#ffd54f'],[0.9,'#ff9f43'],[1.0,'#f5222d']];if(l<=stops[0][0])return stops[0][1];if(l>=stops[stops.length-1][0])return stops[stops.length-1][1];for(let i=0;i<stops.length-1;i++){const a=stops[i],b=stops[i+1];if(l>=a[0]&&l<=b[0]){return lerpColor(a[1],b[1],(l-a[0])/(b[0]-a[0]));}}return '#f5222d';}
+function applyLineLoadColors(){
+  LINES.forEach(L=>{
+    const p=document.getElementById('path-'+L.id); if(!p)return;
+    if(compareMode==='off'){
+      p.setAttribute('stroke',L.color); p.setAttribute('opacity',0.4); p.setAttribute('stroke-width',3);
+      if(dispatchShown && ACTIONS.some(a=>a.line===L.id)){p.setAttribute('stroke-width',5);p.setAttribute('opacity',1);}
+    } else {
+      const lf=compareMode==='before'?lineLoadBefore(L.id):lineLoadAfter(L.id);
+      p.setAttribute('stroke',loadColor(lf)); p.setAttribute('opacity',0.92); p.setAttribute('stroke-width',4.5);
+    }
+  });
+  document.getElementById('loadLegend').style.display=(compareMode==='off')?'none':'block';
+  renderCompare();
+}
+function renderCompare(){
+  if(compareMode==='off'){document.getElementById('cmpBanner').style.display='none';return;}
+  document.getElementById('cmpBanner').style.display='flex';
+  let bs=0,af=0,worst='';
+  LINES.forEach(L=>{const b=lineLoadBefore(L.id);if(b>bs){bs=b;af=lineLoadAfter(L.id);worst=L.name;}});
+  document.getElementById('cmpBefore').textContent=Math.round(bs*100)+'%';
+  document.getElementById('cmpAfter').textContent=Math.round(af*100)+'%';
+  document.getElementById('cmpWorst').textContent=worst;
+  document.getElementById('cmpDelta').textContent='（↓'+Math.round((bs-af)*100)+'% 降风险）';
+}
+
+// ===== 构建地图 =====
+const map=document.getElementById('map');
+let congGroup=null;
+function buildMap(){
+  map.innerHTML='';
+  el('text',{x:30,y:34,fill:'#9aa7b5','font-size':13,'font-weight':700},map).textContent='桂林市区';
+  el('text',{x:560,y:455,fill:'#9aa7b5','font-size':13,'font-weight':700,'text-anchor':'end'},map).textContent='阳朔县';
+  el('path',{d:'M372,60 C352,140 392,205 352,265 C322,320 360,360 333,405',fill:'none',stroke:'#bfe0ff','stroke-width':14,opacity:.55,'stroke-linecap':'round'},map);
+  el('text',{x:402,y:240,fill:'#5aa0e0','font-size':11,transform:'rotate(78 402 240)'},map).textContent='漓江';
+  LINES.forEach(L=>{
+    const d='M'+L.pts.map(p=>p.join(',')).join(' L');
+    el('path',{id:'path-'+L.id,d,fill:'none',stroke:L.color,'stroke-width':3,opacity:.4,'stroke-linejoin':'round'},map);
+    const mid=L.pts[Math.floor(L.pts.length/2)];
+    el('text',{x:mid[0],y:mid[1]-7,fill:L.color,'font-size':9,'text-anchor':'middle',opacity:.85},map).textContent=L.name;
+  });
+  congGroup=el('g',{id:'congGroup'},map);
+  SPOTS.forEach(s=>{
+    const g=el('g',{style:'cursor:pointer'},map);
+    el('circle',{cx:s.x,cy:s.y,r:6,fill:'#fff',stroke:s.g==='ys'?'#00b386':'#1e6fff','stroke-width':2.5},g);
+    el('text',{x:s.x,y:s.y-11,fill:'#1f2d3d','font-size':10,'text-anchor':'middle','font-weight':600},g).textContent=s.name;
+    g.addEventListener('click',()=>selectSpot(s.id));
+  });
+}
+
+// ===== 地图拥堵范围（随时刻+场景动态）=====
+function renderMapCongestion(){
+  if(!congGroup)return;
+  congGroup.innerHTML='';
+  CONG_PROFILES.forEach(p=>{
+    const it=congIntensity(p,hour,scenario);
+    if(it<0.28)return;
+    const s=spotById[p.spot];
+    const r=16+p.baseR*it;
+    const col=it>0.6?'#f5222d':'#ff7a45';
+    const circ=el('circle',{cx:s.x,cy:s.y,r:r,fill:col,opacity:0},congGroup);
+    el('animate',{attributeName:'r',values:(r*0.6)+';'+r+';'+(r*0.6),dur:'2.4s',repeatCount:'indefinite'},circ);
+    el('animate',{attributeName:'opacity',values:'0.42;0.12;0.42',dur:'2.4s',repeatCount:'indefinite'},circ);
+    el('circle',{cx:s.x,cy:s.y,r:6,fill:'none',stroke:col,'stroke-width':2},congGroup);
+    el('text',{x:s.x,y:s.y+r+13,fill:col,'font-size':10.5,'text-anchor':'middle','font-weight':700},congGroup).textContent=(it>0.6?'重度':'中度')+'拥堵';
+  });
+}
+
+// ===== 决策：线路高亮 + 车辆运行 =====
+let dispatchShown=false;
+let dispatched=false;
+function showDispatch(){
+  if(dispatchShown)return; dispatchShown=true;
+  ACTIONS.forEach(a=>{
+    if(!a.line)return;
+    const p=document.getElementById('path-'+a.line);
+    if(p){p.setAttribute('stroke-width',5);p.setAttribute('opacity',1);}
+    for(let k=0;k<3;k++){
+      const b=el('circle',{r:5,fill:'#ffd54f',stroke:'#fff','stroke-width':1.5},map);
+      const am=el('animateMotion',{dur:'5s',repeatCount:'indefinite',begin:(k*1.7)+'s',rotate:'auto'},b);
+      const mp=el('mpath',{href:'#path-'+a.line},am);
+      mp.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href','#path-'+a.line);
+      b.appendChild(am);
+    }
+  });
+}
+
+// ===== 右侧面板 =====
+function renderAlerts(){
+  const box=document.getElementById('alertList');
+  const list=CONG_PROFILES.map(p=>({p,it:congIntensity(p,hour,scenario)})).filter(o=>o.it>=0.3).sort((a,b)=>b.it-a.it);
+  let cnt=list.length;
+  document.getElementById('kpiAlert').textContent=cnt+' 条';
+  if(!cnt){box.innerHTML='<div class="empty">当前时刻预测畅通，无拥堵预警</div>';return;}
+  box.innerHTML=list.map(o=>{
+    const lv=o.it>0.6?'重度':'中度',lvCls=o.it>0.6?'lv-h':'lv-m';
+    return '<div class="alert"><span class="lv '+lvCls+'">'+lv+'</span><span class="ln">'+spotById[o.p.spot].name+'</span><span style="color:var(--sub);font-size:11.5px">'+o.p.line+'</span><span class="lt">'+o.p.note+'</span></div>';
+  }).join('');
+}
+function renderActions(){
+  const box=document.getElementById('actList');
+  box.innerHTML=ACTIONS.map(a=>
+    '<div class="act"><span class="badge">'+a.type+'</span><div style="flex:1;min-width:0"><div class="at">'+a.title+'</div><div class="ad">'+a.detail+'</div><div class="basis">💡 决策依据 · 可解释AI：'+a.basis+'</div></div><span class="ae">'+a.effect+'</span></div>'
+  ).join('');
+}
+
+// ===== 工具调用轨迹（可解释的工具调用链路）=====
+const TOOL_CALLS={
+  2:['感知智能体 → 调用 多源数据API（景区预约/天气/GPS/刷卡）… 成功'],
+  3:['决策智能体 → 调用 排班系统API：读取当前排班与运力 … 成功','决策智能体 → 调用 运力调度引擎：生成弹性调度方案 … 成功','决策智能体 → 调用 仿真回测API：评估方案效果 … 成功'],
+  4:['执行智能体 → 调用 车载终端API：下发调度指令 … 成功','执行智能体 → 调用 调度中心大屏API：刷新视图 … 成功'],
+  5:['评估智能体 → 调用 效果评估API：闭环指标回测 … 成功']
+};
+function pushToolCall(text){
+  const e=document.getElementById('ttEmpty'); if(e)e.remove();
+  const log=document.getElementById('ttLog');
+  const d=document.createElement('div'); d.className='tt-line';
+  d.innerHTML='<span class="tt-dot"></span>'+text;
+  log.appendChild(d); log.scrollTop=log.scrollHeight;
+}
+function pushToolCalls(arr){ if(!arr)return; arr.forEach((t,i)=>setTimeout(()=>pushToolCall(t), i*360)); }
+
+// ===== 客流预测曲线（动态绘制 + 当前时刻游标）=====
+let cur='xs';
+function drawForecast(id,animate){
+  const base=FC[id];
+  const cN=base;
+  const cP=base.map(v=>Math.round(v*1.9));
+  const cE=base.map(v=>Math.round(v*(v>10?2.4:1.2)+(v>40?20:0)));
+  const cB=base.map((v,h)=>Math.round(v*1.2+150*Math.exp(-((h-21)*(h-21))/3)));
+  let main,mainColor;
+  if(scenario==='normal'){main=cN;mainColor='#00b386';}
+  else if(scenario==='peak'){main=cP;mainColor='#1e6fff';}
+  else if(scenario==='event'){main=cE;mainColor='#ff7a45';}
+  else{main=cB;mainColor='#7c4dff';}
+  const pool=[main,cN,cP,cE]; if(scenario==='burst')pool.push(cB);
+  const max=Math.max(...pool.flat()),min=0;
+  const svg=document.getElementById('chart-forecast');
+  const W=640,H=280,pad=36;
+  const x=i=>pad+(i/23)*(W-pad*2);
+  const y=v=>H-pad-((v-min)/(max-min))*(H-pad*2-10);
+  let s='';
+  for(let k=0;k<=4;k++){const val=Math.round(max*k/4);const yy=H-pad-(k/4)*(H-pad*2-10);
+    s+='<line x1="'+pad+'" y1="'+yy+'" x2="'+(W-pad)+'" y2="'+yy+'" stroke="#f0f3f8"/>';
+    s+='<text x="'+(pad-6)+'" y="'+(yy+4)+'" font-size="10" fill="#9aa7b5" text-anchor="end">'+val+'</text>';}
+  for(let i=0;i<24;i+=4){s+='<text x="'+x(i)+'" y="'+(H-pad+16)+'" font-size="10" fill="#9aa7a0" text-anchor="middle">'+i+':00</text>';}
+  const pts=arr=>arr.map((v,i)=>x(i)+','+y(v)).join(' ');
+  s+='<polyline points="'+pts(cN)+'" fill="none" stroke="#00b386" stroke-width="1.6" opacity="0.5"/>';
+  s+='<polyline points="'+pts(cP)+'" fill="none" stroke="#1e6fff" stroke-width="1.6" opacity="0.5"/>';
+  s+='<polyline points="'+pts(cE)+'" fill="none" stroke="#ff7a45" stroke-width="1.6" opacity="0.5" stroke-dasharray="4 3"/>';
+  if(scenario==='burst')s+='<polyline points="'+pts(cB)+'" fill="none" stroke="#7c4dff" stroke-width="1.6" opacity="0.5" stroke-dasharray="4 3"/>';
+  s+='<polygon points="'+pad+','+(H-pad)+' '+pts(main)+' '+(W-pad)+','+(H-pad)+'" fill="'+mainColor+'" opacity="0.10"/>';
+  s+='<polyline id="fcLine" points="'+pts(main)+'" fill="none" stroke="'+mainColor+'" stroke-width="2.8"/>';
+  const hx=x(hour);
+  s+='<line x1="'+hx+'" y1="'+pad+'" x2="'+hx+'" y2="'+(H-pad)+'" stroke="#1f2d3d" stroke-width="1" stroke-dasharray="3 3"/>';
+  s+='<circle cx="'+hx+'" cy="'+y(main[hour])+'" r="4.5" fill="#1f2d3d"/>';
+  s+='<text x="'+hx+'" y="'+(pad-4)+'" font-size="10" fill="#1f2d3d" text-anchor="middle">'+pad2(hour)+':00</text>';
+  svg.innerHTML=s;
+  const line=document.getElementById('fcLine');
+  const len=line.getTotalLength();
+  if(animate){
+    line.style.strokeDasharray=len;line.style.strokeDashoffset=len;line.getBoundingClientRect();
+    line.style.transition='stroke-dashoffset 1.3s ease';line.style.strokeDashoffset=0;
+  }else{
+    line.style.strokeDasharray='none';line.style.strokeDashoffset=0;
+  }
+  document.getElementById('spotInfo').innerHTML=
+    '<div class="kpi" style="flex:1;background:#fff"><div class="v" style="font-size:17px">'+peakH(id)+'</div><div class="l">预测峰值时段</div></div>'+
+    '<div class="kpi warn" style="flex:1;background:#fff"><div class="v" style="font-size:17px">'+Math.max(...main)+'</div><div class="l">峰值预测客流(人/时)</div></div>'+
+    '<div class="kpi" style="flex:1;background:#fff"><div class="v" style="font-size:17px">'+(spotById[id].g==='ys'?'阳朔':'桂林市区')+'</div><div class="l">所属分区</div></div>';
+  updateHourStat();
+}
+function updateHourStat(){
+  const base=FC[cur];
+  const main=scenCurve(base,scenario);
+  document.getElementById('hourStat').innerHTML='当前 <b>'+SCENARIOS[scenario].name+'</b> '+pad2(hour)+':00 · '+spotById[cur].name+' 预测 <b>'+main[hour]+'</b> 人/时';
+}
+function renderChips(){
+  const el2=document.getElementById('spotChips');
+  el2.innerHTML=SPOTS.map(s=>'<span class="chip'+(s.id===cur?' active':'')+'" data-id="'+s.id+'">'+s.name+'</span>').join('');
+  el2.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{cur=c.dataset.id;renderChips();drawForecast(cur,false);});
+}
+function selectSpot(id){cur=id;renderChips();drawForecast(cur,false);}
+
+// ===== 推演流程控制 =====
+const runBtn=document.getElementById('runBtn');
+const disBtn=document.getElementById('dispatchBtn');
+const resetBtn=document.getElementById('resetBtn');
+const status=document.getElementById('runStatus');
+const timeSlider=document.getElementById('timeSlider');
+const hourLabel=document.getElementById('hourLabel');
+const scSel=document.getElementById('scSel');
+let running=false, stage=0;
+
+function setStage(n, trace){
+  stage=n;
+  if(trace && TOOL_CALLS[n]) pushToolCalls(TOOL_CALLS[n]);
+  for(let i=1;i<=5;i++){const st=document.getElementById('st'+i);st.classList.remove('on','done');if(i<n)st.classList.add('done');else if(i===n)st.classList.add('on');}
+  if(n>=2){renderMapCongestion();renderAlerts();applyLineLoadColors();drawForecast(cur,true);status.textContent='② 预测智能体：分区分景区潮汐客流预测完成，地图按当前时刻标注拥堵范围，右侧生成实时预警';}
+  if(n>=3){showDispatch();renderActions();disBtn.disabled=false;status.textContent='③ 决策智能体：生成弹性调度指令（区间车/接驳车/快线/车辆预置），可一键下发';}
+  if(n===4){document.getElementById('execInfo').innerHTML='⚙️ 执行智能体：调度指令已下发至车载终端与调度中心，地图线路高亮、车辆动态运行。';document.getElementById('kpiPlan').textContent=ACTIONS.length+' 项';status.textContent='④ 执行智能体：指令下发完成，运力动态调配中';}
+  if(n===5){document.getElementById('execInfo').innerHTML='📊 评估智能体：仿真回测通过，高峰疏运 +42%、满载率 -18%，形成「感知—预测—决策—执行—评估」闭环。';status.textContent='⑤ 评估智能体：仿真回测通过，闭环优化完成';disBtn.disabled=true;runBtn.disabled=true;runBtn.textContent='✓ 推演完成';}
+}
+function syncTime(){hourLabel.textContent=pad2(hour)+':00';renderMapCongestion();renderAlerts();applyLineLoadColors();drawForecast(cur,false);}
+function syncScenario(){renderMapCongestion();renderAlerts();applyLineLoadColors();drawForecast(cur,false);}
+
+runBtn.onclick=()=>{
+  if(running)return; running=true; runBtn.disabled=true; runBtn.textContent='⏳ 推演中…';
+  resetState(false);
+  hour=11; timeSlider.value=11; hourLabel.textContent='11:00';
+  let n=0;
+  const iv=setInterval(()=>{n++;setStage(n,true);if(n>=3){clearInterval(iv);running=false;}},900);
+};
+disBtn.onclick=()=>{if(stage<3)return;dispatched=true;setStage(4,true);setTimeout(()=>setStage(5,true),1100);};
+resetBtn.onclick=()=>resetState(true);
+timeSlider.oninput=()=>{hour=+timeSlider.value;syncTime();};
+scSel.onchange=()=>{scenario=scSel.value;syncScenario();};
+document.querySelectorAll('#cmpSeg button').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#cmpSeg button').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    compareMode=b.dataset.m; applyLineLoadColors();
+  };
+});
+
+// ===== 导出调度指令单（打印/存PDF）=====
+function buildPrintSheet(){
+  const now=new Date();
+  const p2=n=>('0'+n).slice(-2);
+  const t=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate())+' '+p2(now.getHours())+':'+p2(now.getMinutes());
+  const scName=SCENARIOS[scenario].name;
+  const al=CONG_PROFILES.map(p=>({p,it:congIntensity(p,hour,scenario)})).filter(o=>o.it>=0.3).sort((a,b)=>b.it-a.it);
+  let alertsHtml=al.length?al.map(o=>{
+    const lv=o.it>0.6?'重度':'中度',col=o.it>0.6?'#f5222d':'#ff7a45';
+    return '<li><span class="ps-tag" style="background:'+col+'">'+lv+'</span><span style="font-weight:600">'+spotById[o.p.spot].name+'</span><span style="color:#5b6b7c">'+o.p.line+'</span><span style="margin-left:auto;color:#5b6b7c">'+o.p.note+'</span></li>';
+  }).join(''):'<li style="color:#5b6b7c">当前时刻预测畅通，无拥堵预警</li>';
+  const rows=ACTIONS.map(a=>'<tr><td>'+a.type+'</td><td>'+a.title+'<div style="font-size:11px;color:#5b6b7c;margin-top:3px">决策依据：'+a.basis+'</div></td><td>'+a.detail+'</td><td class="eff">'+a.effect+'</td></tr>').join('');
+  let bs=0,af=0,worst='';
+  LINES.forEach(L=>{const b=lineLoadBefore(L.id);if(b>bs){bs=b;af=lineLoadAfter(L.id);worst=L.name;}});
+  const stTxt=dispatched?('已下发 '+ACTIONS.length+' 项，运力动态调配中'):'待下发（点击「一键下发调度指令」执行）';
+  const loopTxt=dispatched
+    ? '执行智能体已将指令下发至车载终端与调度中心，地图线路高亮、车辆动态运行；评估智能体仿真回测：高峰疏运 +42%、满载率 -18%，形成「感知—预测—决策—执行—评估」闭环。'
+    : '指令待调度员确认下发后，系统将自动下发至车载终端并回测评估效果。';
+  document.getElementById('printSheet').innerHTML=
+    '<div class="ps-head"><div class="ps-title">公交文旅潮汐客流预测与弹性调度智能体</div><div class="ps-sub">调度指令单 · DISPATCH ORDER</div></div>'+
+    '<div class="ps-meta"><span>制单时间：<b>'+t+'</b></span><span>推演场景：<b>'+scName+'</b></span><span>推演时刻：<b>'+pad2(hour)+':00</b></span><span>指令状态：<b>'+stTxt+'</b></span></div>'+
+    '<h2>一、实时拥堵预警</h2><ul class="ps-alert">'+alertsHtml+'</ul>'+
+    '<h2>二、智能体推荐调度指令</h2><table class="ps-tbl"><thead><tr><th>类型</th><th>调度方案</th><th>措施</th><th>预期效果</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<h2>三、满载率对比（降风险）</h2><p style="font-size:13px">当前最紧张线路 <b>'+worst+'</b>：不干预 <b style="color:#f5222d">'+Math.round(bs*100)+'%</b> → 智能体干预后 <b style="color:#00b386">'+Math.round(af*100)+'%</b>（↓'+Math.round((bs-af)*100)+'% 降风险）</p>'+
+    '<h2>四、执行与闭环</h2><p style="font-size:13px;color:#5b6b7c">'+loopTxt+'</p>'+
+    '<div class="ps-foot">桂林市规划设计研究院 · 2026“A超”交通创新大赛 国际赛道（创新赛道）参赛原型 · 模拟数据，仅用于演示</div>';
+}
+document.getElementById('exportBtn').onclick=()=>{buildPrintSheet();setTimeout(()=>window.print(),60);};
+
+// ===== 大屏 / 全屏指挥模式 =====
+const fullBtn=document.getElementById('fullBtn');
+const fsExit=document.getElementById('fsExit');
+function enterFull(){
+  document.body.classList.add('fs');
+  const d=document.documentElement;
+  if(d.requestFullscreen) d.requestFullscreen().catch(()=>{});
+}
+function exitFull(){
+  document.body.classList.remove('fs');
+  if(document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+}
+fullBtn.onclick=()=>{ (document.fullscreenElement||document.body.classList.contains('fs'))?exitFull():enterFull(); };
+fsExit.onclick=exitFull;
+document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement) document.body.classList.remove('fs'); });
+
+function resetState(full){
+  running=false; stage=0;
+  document.getElementById('st1').classList.remove('on','done');
+  for(let i=2;i<=5;i++)document.getElementById('st'+i).classList.remove('on','done');
+  document.getElementById('alertList').innerHTML='<div class="empty">拖动时刻滑块 / 切换场景，查看各时刻实时拥堵预警</div>';
+  document.getElementById('actList').innerHTML='<div class="empty">运行推演后，此处显示可一键下发的调度方案</div>';
+  document.getElementById('ttLog').innerHTML='<span class="tt-empty" id="ttEmpty">运行推演时，此处实时显示智能体调用的外部系统与 API</span>';
+  document.getElementById('execInfo').innerHTML='指令下发后，地图线路高亮、车辆动态运行，系统回测评估效果';
+  document.getElementById('kpiPlan').textContent='0 项';
+  dispatchShown=false;
+  dispatched=false;
+  hour=9; scenario='peak'; timeSlider.value=9; hourLabel.textContent='09:00'; scSel.value='peak';
+  compareMode='off'; document.querySelectorAll('#cmpSeg button').forEach(x=>x.classList.toggle('active',x.dataset.m==='off'));
+  runBtn.disabled=false; runBtn.textContent='▶ 运行智能体推演';
+  disBtn.disabled=true;
+  status.textContent='点击「运行智能体推演」观看全链路；或直接拖动下方时刻滑块、切换场景自主探查';
+  buildMap(); renderMapCongestion(); renderAlerts(); applyLineLoadColors(); drawForecast(cur,false);
+  if(full)renderChips();
+}
+
+// 初始化
+buildMap(); renderChips(); renderMapCongestion(); renderAlerts(); applyLineLoadColors(); drawForecast(cur,false);
+</script>
+<script src="/static/api-client.js"></script>
+</body>
+</html>
