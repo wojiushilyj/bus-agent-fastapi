@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.engine import LINES, SPOTS, forecast, generate_actions, snapshot
+from app.engine import LINES, SPOTS, forecast, generate_actions, metrics_for, snapshot
 
 
 class EngineTests(unittest.TestCase):
@@ -25,6 +25,20 @@ class EngineTests(unittest.TestCase):
         self.assertTrue(all(-90 <= spot["latitude"] <= 90 for spot in SPOTS))
         self.assertTrue(all(-180 <= spot["longitude"] <= 180 for spot in SPOTS))
         self.assertTrue(all(len(line["route"]) >= 2 for line in LINES))
+
+    def test_invalid_engine_inputs_are_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "未知场景"):
+            snapshot(9, "unknown")
+        with self.assertRaisesRegex(ValueError, "hour"):
+            snapshot(24, "peak")
+        with self.assertRaisesRegex(ValueError, "未知景区"):
+            forecast("missing", "peak")
+
+    def test_metrics_match_configured_spots(self) -> None:
+        metrics = metrics_for("peak", 4)
+        self.assertEqual(metrics["covered_spots"], len(SPOTS))
+        with self.assertRaisesRegex(ValueError, "不能为负数"):
+            metrics_for("peak", -1)
 
 
 if __name__ == "__main__":

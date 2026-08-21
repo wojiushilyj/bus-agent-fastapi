@@ -24,6 +24,18 @@ class FrontendTests(unittest.TestCase):
         self.assertIn('id="historyPanel"', self.html)
         self.assertIn('/api/simulations?limit=8', self.javascript)
 
+    def test_frontend_has_timeout_and_stale_workflow_guards(self) -> None:
+        self.assertIn("controller.abort()", self.javascript)
+        self.assertIn("workflowSerial", self.javascript)
+        self.assertIn("clearWorkflowTimers", self.javascript)
+        self.assertIn('id="historyDetail"', self.html)
+        self.assertIn("showHistoryDetail", self.javascript)
+
+    def test_accessibility_and_reduced_motion_are_present(self) -> None:
+        self.assertIn('aria-live="polite"', self.html)
+        self.assertIn('aria-label="推演时刻"', self.html)
+        self.assertIn("prefers-reduced-motion", self.html)
+
 
 if __name__ == "__main__":
     unittest.main()

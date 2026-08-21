@@ -8,6 +8,7 @@
     config: null,
     actions: [],
     requestSerial: 0,
+    workflowSerial: 0,
   };
 
   const originalRenderAlerts = renderAlerts;
@@ -27,6 +28,8 @@
   const serviceDot = document.getElementById("serviceDot");
   const serviceText = document.getElementById("serviceText");
   const dataTime = document.getElementById("dataTime");
+  const historyDetail = document.getElementById("historyDetail");
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   let geoMap = null;
   let geoLines = {};
@@ -35,23 +38,42 @@
   let geoVehicleLayer = null;
   let geoVehicleFrame = null;
   let tileErrors = 0;
+  let tileFallbackTimer = null;
+  let stageTimer = null;
+  let evaluationTimer = null;
+  let healthTimer = null;
 
   async function api(path, options) {
-    const response = await fetch(path, {
-      headers: { "Content-Type": "application/json" },
-      ...options,
-    });
-    if (!response.ok) {
-      let message = "服务请求失败";
-      try {
-        const body = await response.json();
-        message = body.detail || message;
-      } catch (_) {
-        // 保留通用错误信息。
+    const requestOptions = options || {};
+    const controller = new AbortController();
+    const timeout = setTimeout(function () { controller.abort(); }, 10000);
+    const headers = { Accept: "application/json", ...(requestOptions.headers || {}) };
+    if (requestOptions.body !== undefined) headers["Content-Type"] = "application/json";
+    try {
+      const response = await fetch(path, {
+        ...requestOptions,
+        headers: headers,
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        let message = "服务请求失败（HTTP " + response.status + "）";
+        try {
+          const body = await response.json();
+          message = body.detail || message;
+        } catch (_) {
+          // 非 JSON 错误响应保留状态码信息。
+        }
+        throw new Error(message);
       }
-      throw new Error(message);
+      return await response.json();
+    } catch (error) {
+      if (error.name === "AbortError") throw new Error("服务请求超时，请稍后重试");
+      throw error;
+    } finally {
+      clearTimeout(timeout);
     }
-    return response.json();
   }
 
   function escapeHtml(value) {
@@ -102,15 +124,20 @@
   }
 
   function serverRenderActions() {
-    if (!apiState.actions.length) {
+    if (!apiState.simulation) {
       originalRenderActions();
+      return;
+    }
+    if (!apiState.actions.length) {
+      document.getElementById("actList").innerHTML =
+        '<div class="empty">当前场景无需新增弹性调度指令</div>';
       return;
     }
     document.getElementById("actList").innerHTML = apiState.actions.map((action) =>
       '<div class="act"><span class="badge">' + escapeHtml(action.type) +
       '</span><div style="flex:1;min-width:0"><div class="at">' + escapeHtml(action.title) +
       '</div><div class="ad">' + escapeHtml(action.detail) +
-      '</div><div class="basis">💡 决策依据 · 可解释AI：' + action.basis +
+      '</div><div class="basis">💡 决策依据 · 可解释AI：' + escapeHtml(action.basis) +
       '</div></div><span class="ae">' + escapeHtml(action.effect) + "</span></div>"
     ).join("");
   }
@@ -155,14 +182,26 @@
       maxZoom: config.map.max_zoom || 19,
       attribution: config.map.tile_attribution,
     }).addTo(geoMap);
+    tileFallbackTimer = setTimeout(function () {
+      if (!mapWrap.classList.contains("geo-ready")) {
+        mapModeBtn.disabled = true;
+        mapModeBtn.textContent = "当前为示意图";
+        mapNote.textContent = "底图加载超时，已自动使用线网示意图";
+      }
+    }, 8000);
     tileLayer.once("tileload", function () {
+      clearTimeout(tileFallbackTimer);
       mapWrap.classList.add("geo-ready");
+      mapModeBtn.disabled = false;
+      mapModeBtn.textContent = "切换示意图";
       mapNote.textContent = "真实地理底图 · 点击站点查看预测曲线";
       setTimeout(function () { geoMap.invalidateSize(); }, 0);
     });
     tileLayer.on("tileerror", function () {
       tileErrors += 1;
       if (tileErrors >= 4 && !mapWrap.classList.contains("geo-ready")) {
+        mapModeBtn.disabled = true;
+        mapModeBtn.textContent = "当前为示意图";
         mapNote.textContent = "底图服务暂不可用，已自动使用线网示意图";
       }
     });
@@ -176,7 +215,7 @@
         opacity: 0.78,
         lineCap: "round",
         lineJoin: "round",
-      }).addTo(geoMap).bindTooltip(line.name, { sticky: true });
+      }).addTo(geoMap).bindTooltip(escapeHtml(line.name), { sticky: true });
     });
     config.spots.forEach(function (spot) {
       const marker = L.circleMarker([spot.latitude, spot.longitude], {
@@ -186,7 +225,7 @@
         fillColor: "#ffffff",
         fillOpacity: 1,
       }).addTo(geoMap);
-      marker.bindTooltip(spot.name, {
+      marker.bindTooltip(escapeHtml(spot.name), {
         permanent: true,
         direction: "top",
         offset: [0, -7],
@@ -198,6 +237,7 @@
     });
 
     mapModeBtn.onclick = function () {
+      if (!mapWrap.classList.contains("geo-ready")) return;
       const schematic = mapWrap.classList.toggle("force-schematic");
       mapModeBtn.textContent = schematic ? "切换真实底图" : "切换示意图";
       mapNote.textContent = schematic
@@ -207,6 +247,18 @@
     };
     updateGeoLineStyles();
     updateGeoCongestion();
+    updateGeoSpotStyles();
+  }
+
+  function updateGeoSpotStyles() {
+    Object.keys(geoSpots).forEach(function (spotId) {
+      const selected = spotId === cur;
+      geoSpots[spotId].setStyle({
+        radius: selected ? 9 : 6,
+        weight: selected ? 4 : 3,
+        fillColor: selected ? "#fff3cd" : "#ffffff",
+      });
+    });
   }
 
   function updateGeoLineStyles() {
@@ -243,7 +295,9 @@
         fillColor: color,
         fillOpacity: 0.16,
         className: "geo-congestion-pulse",
-      }).addTo(geoCongestionLayer).bindTooltip(alert.severity + "拥堵 · " + alert.note);
+      }).addTo(geoCongestionLayer).bindTooltip(
+        escapeHtml(alert.severity + "拥堵 · " + alert.note)
+      );
     });
   }
 
@@ -278,6 +332,7 @@
       }).addTo(geoVehicleLayer);
       moving.push({ marker: marker, route: line.route, offset: index * 0.22 });
     });
+    if (reduceMotion || document.hidden || !moving.length) return;
     const startedAt = performance.now();
     function animate(now) {
       const base = ((now - startedAt) % 8000) / 8000;
@@ -307,6 +362,7 @@
     originalResetState(full);
     updateGeoLineStyles();
     updateGeoCongestion();
+    updateGeoSpotStyles();
   };
 
   async function refreshSnapshot() {
@@ -352,17 +408,60 @@
         "<td>" + escapeHtml(item.worst_line) + "</td>" +
         '<td><span class="history-load">' + Math.round(item.before_load * 100) + "%</span> → " +
         '<span class="history-load history-load-after">' + Math.round(item.after_load * 100) + "%</span></td>" +
-        "<td>" + item.action_count + " 项</td>" +
+        "<td>" + Number(item.action_count) + " 项</td>" +
         "<td>" + formatLocalTime(item.created_at, true) + "</td>" +
+        '<td><button type="button" class="history-view" data-id="' + escapeHtml(item.id) + '">查看</button></td>' +
         "</tr>";
     }).join("");
     box.innerHTML = '<div class="history-table-wrap"><table class="history-table"><thead><tr>' +
-      "<th>状态</th><th>场景</th><th>时刻</th><th>预警</th><th>最紧张线路</th><th>满载率干预</th><th>指令</th><th>创建时间</th>" +
+      "<th>状态</th><th>场景</th><th>时刻</th><th>预警</th><th>最紧张线路</th><th>满载率干预</th><th>指令</th><th>创建时间</th><th>详情</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>";
+    box.querySelectorAll(".history-view").forEach(function (button) {
+      button.addEventListener("click", function () {
+        showHistoryDetail(button.dataset.id).catch(reportHistoryError);
+      });
+    });
   }
 
   async function refreshHistory() {
     renderHistory(await api("/api/simulations?limit=8"));
+  }
+
+  function renderHistoryDetail(detail) {
+    const statusMap = { planned: "待下发", dispatched: "执行中", evaluated: "已评估" };
+    const scenarioName = SCENARIOS[detail.scenario] ? SCENARIOS[detail.scenario].name : detail.scenario;
+    const events = detail.events.map(function (event) {
+      return '<div class="history-event"><b>阶段 ' + Number(event.stage) + " · " +
+        escapeHtml(event.agent_name) + "</b>　" + escapeHtml(event.tool_name) + "：" +
+        escapeHtml(event.message) + "</div>";
+    }).join("");
+    historyDetail.innerHTML =
+      '<div class="history-detail-head"><strong>推演详情</strong><button type="button" class="history-view" id="historyDetailClose">关闭</button></div>' +
+      '<div class="history-detail-grid">' +
+      '<div class="history-detail-item">状态<b>' + escapeHtml(statusMap[detail.status] || detail.status) + "</b></div>" +
+      '<div class="history-detail-item">场景与时刻<b>' + escapeHtml(scenarioName) + " · " + String(detail.hour).padStart(2, "0") + ":00</b></div>" +
+      '<div class="history-detail-item">调度指令<b>' + Number(detail.actions.length) + " 项</b></div>" +
+      '<div class="history-detail-item">导出次数<b>' + Number(detail.export_count) + " 次</b></div>" +
+      "</div>" +
+      '<div class="history-event"><b>最紧张线路</b>　' + escapeHtml(detail.worst_line) +
+      "，满载率 " + Math.round(Number(detail.before_load) * 100) + "% → " +
+      Math.round(Number(detail.after_load) * 100) + "%</div>" + events;
+    historyDetail.hidden = false;
+    document.getElementById("historyDetailClose").onclick = function () {
+      historyDetail.hidden = true;
+    };
+    historyDetail.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
+  }
+
+  async function showHistoryDetail(simulationId) {
+    historyDetail.hidden = false;
+    historyDetail.innerHTML = '<div class="empty">正在读取推演详情…</div>';
+    renderHistoryDetail(await api("/api/simulations/" + encodeURIComponent(simulationId)));
+  }
+
+  function reportHistoryError(error) {
+    historyDetail.hidden = false;
+    historyDetail.textContent = "历史记录读取失败：" + error.message;
   }
 
   function reportConnectionError(error) {
@@ -370,9 +469,45 @@
     status.textContent = "后端服务连接失败：" + error.message;
   }
 
+  function clearWorkflowTimers() {
+    if (stageTimer) clearInterval(stageTimer);
+    if (evaluationTimer) clearTimeout(evaluationTimer);
+    stageTimer = null;
+    evaluationTimer = null;
+  }
+
+  function setExplorationDisabled(disabled) {
+    timeSlider.disabled = disabled;
+    scSel.disabled = disabled;
+    document.getElementById("spotChips").querySelectorAll("button").forEach(function (button) {
+      button.disabled = disabled;
+    });
+  }
+
+  function clearActivePlan(message) {
+    if (!running && !apiState.simulation && !apiState.actions.length) return;
+    apiState.workflowSerial += 1;
+    clearWorkflowTimers();
+    running = false;
+    setExplorationDisabled(false);
+    apiState.simulation = null;
+    apiState.snapshot = null;
+    apiState.forecast = null;
+    apiState.actions = [];
+    window.busAgentRuntimeActions = null;
+    resetState(false);
+    if (message) status.textContent = message;
+  }
+
   runBtn.onclick = async function () {
     if (running) return;
+    const workflowSerial = ++apiState.workflowSerial;
+    clearWorkflowTimers();
+    apiState.simulation = null;
+    apiState.actions = [];
+    window.busAgentRuntimeActions = null;
     running = true;
+    setExplorationDisabled(true);
     runBtn.disabled = true;
     runBtn.textContent = "⏳ 推演中…";
     resetState(false);
@@ -381,24 +516,33 @@
     hourLabel.textContent = "11:00";
     try {
       await Promise.all([refreshSnapshot(), refreshForecast()]);
-      apiState.simulation = await api("/api/simulations", {
+      if (workflowSerial !== apiState.workflowSerial) return;
+      const simulation = await api("/api/simulations", {
         method: "POST",
         body: JSON.stringify({ scenario: scenario, hour: hour, spot_id: cur }),
       });
+      if (workflowSerial !== apiState.workflowSerial) return;
+      apiState.simulation = simulation;
       apiState.actions = apiState.simulation.actions;
-      refreshHistory().catch(reportConnectionError);
+      window.busAgentRuntimeActions = apiState.actions;
+      refreshHistory().catch(reportHistoryError);
       let nextStage = 0;
-      const timer = setInterval(function () {
+      stageTimer = setInterval(function () {
         nextStage += 1;
         setStage(nextStage, true);
         if (nextStage >= 3) {
-          clearInterval(timer);
+          clearInterval(stageTimer);
+          stageTimer = null;
           running = false;
+          setExplorationDisabled(false);
           document.getElementById("kpiPlan").textContent = "0 项";
+          runBtn.textContent = "✓ 方案已生成";
         }
       }, 900);
     } catch (error) {
+      if (workflowSerial !== apiState.workflowSerial) return;
       running = false;
+      setExplorationDisabled(false);
       runBtn.disabled = false;
       runBtn.textContent = "▶ 运行智能体推演";
       reportConnectionError(error);
@@ -408,20 +552,31 @@
   disBtn.onclick = async function () {
     if (stage < 3 || !apiState.simulation) return;
     disBtn.disabled = true;
+    const simulationId = apiState.simulation.id;
     try {
-      apiState.simulation = await api("/api/simulations/" + apiState.simulation.id + "/dispatch", { method: "POST" });
+      apiState.simulation = await api("/api/simulations/" + simulationId + "/dispatch", { method: "POST" });
       dispatched = true;
       setStage(4, true);
       document.getElementById("kpiPlan").textContent = apiState.simulation.actions.length + " 项";
-      refreshHistory().catch(reportConnectionError);
-      setTimeout(async function () {
-        try {
-          apiState.simulation = await api("/api/simulations/" + apiState.simulation.id + "/evaluate", { method: "POST" });
+      refreshHistory().catch(reportHistoryError);
+      // 后端评估请求立即发出；1.1 秒延迟仅用于保留原型的阶段演示节奏。
+      const evaluation = api("/api/simulations/" + simulationId + "/evaluate", {
+        method: "POST",
+      }).then(
+        function (value) { return { ok: true, value: value }; },
+        function (error) { return { ok: false, error: error }; }
+      );
+      evaluationTimer = setTimeout(async function () {
+        evaluationTimer = null;
+        const result = await evaluation;
+        if (!apiState.simulation || apiState.simulation.id !== simulationId) return;
+        if (result.ok) {
+          apiState.simulation = result.value;
           setStage(5, true);
-          refreshHistory().catch(reportConnectionError);
-        } catch (error) {
+          refreshHistory().catch(reportHistoryError);
+        } else {
           disBtn.disabled = false;
-          reportConnectionError(error);
+          reportConnectionError(result.error);
         }
       }, 1100);
     } catch (error) {
@@ -431,8 +586,16 @@
   };
 
   resetBtn.onclick = function () {
+    apiState.workflowSerial += 1;
+    clearWorkflowTimers();
+    running = false;
+    setExplorationDisabled(false);
     apiState.simulation = null;
+    apiState.snapshot = null;
+    apiState.forecast = null;
     apiState.actions = [];
+    window.busAgentRuntimeActions = null;
+    historyDetail.hidden = true;
     resetState(true);
     Promise.all([refreshSnapshot(), refreshForecast()]).catch(reportConnectionError);
   };
@@ -441,6 +604,7 @@
   timeSlider.oninput = function () {
     hour = +timeSlider.value;
     hourLabel.textContent = pad2(hour) + ":00";
+    clearActivePlan("参数已变化，请重新运行智能体推演生成匹配方案");
     renderMapCongestion();
     drawForecast(cur, false);
     clearTimeout(sliderTimer);
@@ -451,6 +615,7 @@
 
   scSel.onchange = function () {
     scenario = scSel.value;
+    clearActivePlan("场景已变化，请重新运行智能体推演生成匹配方案");
     renderMapCongestion();
     drawForecast(cur, false);
     Promise.all([refreshSnapshot(), refreshForecast()]).catch(reportConnectionError);
@@ -458,23 +623,32 @@
 
   selectSpot = function (id) {
     originalSelectSpot(id);
+    updateGeoSpotStyles();
+    clearActivePlan("景区已变化，请重新运行智能体推演生成匹配方案");
     refreshForecast().catch(reportConnectionError);
   };
   document.addEventListener("click", function (event) {
     if (event.target.closest && event.target.closest("#spotChips .chip")) {
-      setTimeout(function () { refreshForecast().catch(reportConnectionError); }, 0);
+      setTimeout(function () {
+        updateGeoSpotStyles();
+        clearActivePlan("景区已变化，请重新运行智能体推演生成匹配方案");
+        refreshForecast().catch(reportConnectionError);
+      }, 0);
     }
   });
 
   document.getElementById("historyRefresh").onclick = function () {
-    refreshHistory().catch(reportConnectionError);
+    refreshHistory().catch(reportHistoryError);
   };
 
   document.getElementById("exportBtn").onclick = async function () {
     buildPrintSheet();
     if (apiState.simulation) {
       try {
-        await api("/api/simulations/" + apiState.simulation.id + "/exports", { method: "POST" });
+        await api("/api/simulations/" + apiState.simulation.id + "/exports", {
+          method: "POST",
+          body: JSON.stringify({ format: "print" }),
+        });
       } catch (error) {
         reportConnectionError(error);
         return;
@@ -487,22 +661,55 @@
     if (geoMap) setTimeout(function () { geoMap.invalidateSize(); }, 120);
   });
 
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      stopGeoVehicles();
+    } else if (dispatched) {
+      startGeoVehicles();
+    }
+  });
+
+  async function checkHealth() {
+    try {
+      const health = await api("/api/health");
+      setServiceState(true, "服务正常 v" + health.version);
+    } catch (error) {
+      setServiceState(false, navigator.onLine ? "服务异常" : "网络离线");
+    }
+  }
+
   async function initialize() {
     try {
       const results = await Promise.all([
         api("/api/health"),
         api("/api/config"),
+      ]);
+      apiState.config = results[1];
+      document.getElementById("kpiSpots").textContent = apiState.config.spots.length + " 个";
+      setServiceState(true, "服务正常 v" + results[0].version);
+      initGeoMap(apiState.config);
+      const dataResults = await Promise.allSettled([
         refreshSnapshot(),
         refreshForecast(),
         refreshHistory(),
       ]);
-      apiState.config = results[1];
-      setServiceState(true, "服务正常");
-      initGeoMap(apiState.config);
+      if (dataResults[0].status === "rejected") reportConnectionError(dataResults[0].reason);
+      if (dataResults[1].status === "rejected") reportConnectionError(dataResults[1].reason);
+      if (dataResults[2].status === "rejected") reportHistoryError(dataResults[2].reason);
+      healthTimer = setInterval(checkHealth, 30000);
     } catch (error) {
       reportConnectionError(error);
     }
   }
+
+  window.addEventListener("online", checkHealth);
+  window.addEventListener("offline", function () { setServiceState(false, "网络离线"); });
+  window.addEventListener("beforeunload", function () {
+    clearWorkflowTimers();
+    stopGeoVehicles();
+    clearTimeout(tileFallbackTimer);
+    if (healthTimer) clearInterval(healthTimer);
+  });
 
   initialize();
 })();

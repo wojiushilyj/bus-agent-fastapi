@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "bus_agent.db"
+from .settings import load_settings
 
 
 def database_path() -> Path:
-    configured = os.getenv("BUS_AGENT_DB_PATH")
-    return Path(configured).expanduser().resolve() if configured else DEFAULT_DB_PATH
+    return load_settings().database_path
 
 
 @contextmanager
@@ -25,7 +21,8 @@ def connect() -> Iterator[sqlite3.Connection]:
     connection = sqlite3.connect(path, timeout=10)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute("PRAGMA busy_timeout = 5000")
+    connection.execute("PRAGMA busy_timeout = 10000")
+    connection.execute("PRAGMA synchronous = NORMAL")
     try:
         yield connection
     finally:
@@ -99,16 +96,26 @@ CREATE TABLE IF NOT EXISTS export_logs (
 CREATE INDEX IF NOT EXISTS idx_simulations_created_at
 ON simulations(created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_dispatch_actions_simulation
-ON dispatch_actions(simulation_id, sequence_no);
+CREATE INDEX IF NOT EXISTS idx_simulations_scenario_created_at
+ON simulations(scenario, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_simulations_status_created_at
+ON simulations(status, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_agent_events_simulation
 ON agent_events(simulation_id, stage, id);
+
+CREATE INDEX IF NOT EXISTS idx_export_logs_simulation
+ON export_logs(simulation_id, exported_at DESC);
 """
 
 
 def init_db() -> None:
     with connect() as connection:
         connection.executescript(SCHEMA)
+        # UNIQUE(simulation_id, sequence_no) 已提供同等索引，移除旧版冗余索引。
+        connection.execute("DROP INDEX IF EXISTS idx_dispatch_actions_simulation")
         connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("PRAGMA synchronous = NORMAL")
+        connection.execute("PRAGMA user_version = 2")
         connection.execute("PRAGMA optimize")

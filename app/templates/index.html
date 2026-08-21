@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="桂林—阳朔文旅公交潮汐客流预测、拥堵预警与弹性调度智能体运行平台">
 <title>公交文旅潮汐客流预测与弹性调度智能体 · 调度指挥中心</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
@@ -69,6 +70,7 @@
   .maplegend{position:absolute;top:10px;right:12px;z-index:700;background:rgba(255,255,255,.92);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--sub);line-height:1.7;box-shadow:0 2px 8px rgba(31,45,61,.08);}
   .maplegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
   #mapModeBtn{position:absolute;left:12px;bottom:10px;z-index:700;border:1px solid var(--line);background:rgba(255,255,255,.94);color:var(--brand);padding:5px 9px;border-radius:7px;font-size:10.5px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(31,45,61,.08);}
+  #mapModeBtn:disabled{cursor:default;color:var(--sub);opacity:.7;}
   .geo-spot-label{background:rgba(255,255,255,.92);border:1px solid #d7dee8;border-radius:5px;color:#1f2d3d;font-size:10px;font-weight:600;padding:2px 5px;box-shadow:0 1px 4px rgba(31,45,61,.15);}
   .geo-spot-label::before{display:none;}
   .geo-bus{font-size:17px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));transform:translate(-3px,-4px);}
@@ -167,6 +169,14 @@
   .history-status.evaluated{background:#e8f8f2;color:#00875f;}
   .history-load{font-weight:700;color:var(--danger);}
   .history-load-after{color:var(--brand2);}
+  .history-view{border:1px solid var(--line);background:#fff;color:var(--brand);border-radius:6px;padding:3px 8px;font-size:10.5px;cursor:pointer;}
+  .history-detail{margin-top:10px;border:1px solid var(--line);border-radius:9px;background:#fff;padding:12px;}
+  .history-detail-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:9px;}
+  .history-detail-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px;}
+  .history-detail-item{background:var(--soft);border-radius:7px;padding:8px;color:var(--sub);font-size:10.5px;}
+  .history-detail-item b{display:block;color:var(--ink);font-size:12px;margin-top:2px;}
+  .history-event{padding:6px 0;border-top:1px dashed var(--line);font-size:11px;color:var(--sub);}
+  .history-event b{color:var(--ink);}
   /* ===== 大屏 / 全屏指挥模式 ===== */
   #fullBtn{background:#0f1f3a;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;}
   #fullBtn:hover{background:#173056;}
@@ -189,6 +199,8 @@
     @page{size:A4;margin:14mm;}
   }
   @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr);}.cmd{grid-template-columns:1fr;}.twocol,.land,.layer{grid-template-columns:1fr;}.mapwrap{min-height:430px;}.maplegend{top:46px;right:8px;}.maphead{left:48px;}}
+  @media(max-width:680px){.history-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.cards{grid-template-columns:repeat(2,1fr);}}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important;}}
 </style>
 </head>
 <body>
@@ -217,31 +229,31 @@
       <div class="kpi green"><div class="v">+42%</div><div class="l">高峰疏运能力提升</div></div>
       <div class="kpi green"><div class="v">-18%</div><div class="l">线路满载率下降</div></div>
       <div class="kpi"><div class="v" id="kpiPlan">0 项</div><div class="l">已下发调度指令</div></div>
-      <div class="kpi"><div class="v">11 个</div><div class="l">覆盖景区/接驳通道</div></div>
+      <div class="kpi"><div class="v" id="kpiSpots">10 个</div><div class="l">覆盖景区/接驳通道</div></div>
     </div>
 
     <!-- 推演控制 -->
     <div class="runbar">
-      <button id="runBtn">▶ 运行智能体推演</button>
-      <button id="dispatchBtn" disabled>⚡ 一键下发调度指令</button>
-      <button id="resetBtn">↺ 重置</button>
-      <button id="exportBtn">🖨 导出调度指令单</button>
-      <button id="fullBtn">🖥 全屏指挥</button>
-      <span id="runStatus">点击「运行智能体推演」观看全链路；或直接拖动下方时刻滑块、切换场景自主探查</span>
-      <span class="service-meta"><span class="service-pill"><i class="service-dot" id="serviceDot"></i><span id="serviceText">服务连接中</span></span><span id="dataTime">数据时间 —</span></span>
+      <button id="runBtn" type="button">▶ 运行智能体推演</button>
+      <button id="dispatchBtn" type="button" disabled>⚡ 一键下发调度指令</button>
+      <button id="resetBtn" type="button">↺ 重置</button>
+      <button id="exportBtn" type="button">🖨 导出调度指令单</button>
+      <button id="fullBtn" type="button">🖥 全屏指挥</button>
+      <span id="runStatus" role="status" aria-live="polite">点击「运行智能体推演」观看全链路；或直接拖动下方时刻滑块、切换场景自主探查</span>
+      <span class="service-meta"><span class="service-pill" role="status" aria-live="polite"><i class="service-dot" id="serviceDot"></i><span id="serviceText">服务连接中</span></span><span id="dataTime">数据时间 —</span></span>
     </div>
 
     <!-- 时刻 + 场景控制（调度员自主探查） -->
     <div class="ctrlbar">
-      <label>场景</label>
-      <select id="scSel">
+      <label for="scSel">场景</label>
+      <select id="scSel" aria-label="客流推演场景">
         <option value="normal">平日</option>
         <option value="peak" selected>旅游高峰日</option>
         <option value="event">大型活动日</option>
         <option value="burst">突发大客流</option>
       </select>
-      <label style="margin-left:6px;">时刻</label>
-      <input type="range" id="timeSlider" min="0" max="23" value="9">
+      <label for="timeSlider" style="margin-left:6px;">时刻</label>
+      <input type="range" id="timeSlider" min="0" max="23" value="9" aria-label="推演时刻">
       <span id="hourLabel">09:00</span>
       <span id="hourStat"></span>
     </div>
@@ -250,9 +262,9 @@
     <div class="cmpbar">
       <label>满载率视角</label>
       <div class="seg" id="cmpSeg">
-        <button data-m="off" class="active">原色线网</button>
-        <button data-m="before">不干预·传统排班</button>
-        <button data-m="after">智能体干预后</button>
+        <button type="button" data-m="off" class="active">原色线网</button>
+        <button type="button" data-m="before">不干预·传统排班</button>
+        <button type="button" data-m="after">智能体干预后</button>
       </div>
       <span class="cmp-tip">色阶越红=线路满载率越高（越易超载）；切到“智能体干预后”，地图整条线转绿，直接体现<b>降风险</b>价值（应用价值 20 分）</span>
     </div>
@@ -296,8 +308,8 @@
           <div class="scale"><span>60%</span><span>80%</span><span>100%</span></div>
         </div>
         <div id="geoMap" role="region" aria-label="桂林至阳朔文旅公交真实底图"></div>
-        <svg id="map" viewBox="0 0 680 470" width="100%"></svg>
-        <button id="mapModeBtn" type="button">切换示意图</button>
+        <svg id="map" viewBox="0 0 680 470" width="100%" role="img" aria-label="桂林至阳朔文旅公交线网示意图"></svg>
+        <button id="mapModeBtn" type="button" disabled>底图加载中</button>
         <div class="mapnote" id="mapNote">正在加载真实底图，失败时自动使用线网示意图</div>
       </div>
 
@@ -323,7 +335,7 @@
       <div class="fc-top" id="spotChips"></div>
       <div id="spotInfo" style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap;"></div>
       <div class="legend"><span><i style="background:#1e6fff"></i>旅游高峰日</span><span><i style="background:#00b386"></i>平日</span><span><i style="background:#ff7a45"></i>大型活动日</span><span style="color:var(--ink);font-weight:600;">▏当前时刻游标</span></div>
-      <svg id="chart-forecast" viewBox="0 0 640 280" width="100%"></svg>
+      <svg id="chart-forecast" viewBox="0 0 640 280" width="100%" role="img" aria-label="所选景区二十四小时客流预测曲线"></svg>
     </div>
 
     <div class="panel" id="historyPanel" style="margin:16px 0 0;background:var(--soft);">
@@ -332,6 +344,7 @@
         <button id="historyRefresh" type="button">↻ 刷新记录</button>
       </div>
       <div id="historyList"><div class="empty">正在读取历史推演记录…</div></div>
+      <div id="historyDetail" class="history-detail" hidden></div>
     </div>
   </section>
 
@@ -466,6 +479,7 @@ const ACTIONS=[
   {type:'快线',title:'桂林↔阳朔 跨区快线',detail:'按去程/回程潮汐双向加开',effect:'跨区 +38%',line:'L3',basis:'跨区直通车 去程 09:00 满载率 <b>94%</b>（≥85%）→ 按去/回程潮汐双向加开快线'},
   {type:'车辆预置',title:'热点场站 车辆预置+充电',detail:'新能源提前就位，避免高峰脱班',effect:'就绪 100%',line:null,basis:'热点场站 预测 11:00 集中到发，运力缺口 <b>12 标台</b> → 提前预置 + 充电，避免高峰脱班'}
 ];
+function activeActions(){return Array.isArray(window.busAgentRuntimeActions)?window.busAgentRuntimeActions:ACTIONS;}
 const spotById={}; SPOTS.forEach(s=>spotById[s.id]=s);
 
 // 模拟 24h 客流形状
@@ -503,7 +517,7 @@ function applyLineLoadColors(){
     const p=document.getElementById('path-'+L.id); if(!p)return;
     if(compareMode==='off'){
       p.setAttribute('stroke',L.color); p.setAttribute('opacity',0.4); p.setAttribute('stroke-width',3);
-      if(dispatchShown && ACTIONS.some(a=>a.line===L.id)){p.setAttribute('stroke-width',5);p.setAttribute('opacity',1);}
+      if(dispatchShown && activeActions().some(a=>(a.line||a.line_id)===L.id)){p.setAttribute('stroke-width',5);p.setAttribute('opacity',1);}
     } else {
       const lf=compareMode==='before'?lineLoadBefore(L.id):lineLoadAfter(L.id);
       p.setAttribute('stroke',loadColor(lf)); p.setAttribute('opacity',0.92); p.setAttribute('stroke-width',4.5);
@@ -570,15 +584,16 @@ let dispatchShown=false;
 let dispatched=false;
 function showDispatch(){
   if(dispatchShown)return; dispatchShown=true;
-  ACTIONS.forEach(a=>{
-    if(!a.line)return;
-    const p=document.getElementById('path-'+a.line);
+  activeActions().forEach(a=>{
+    const lineId=a.line||a.line_id;
+    if(!lineId)return;
+    const p=document.getElementById('path-'+lineId);
     if(p){p.setAttribute('stroke-width',5);p.setAttribute('opacity',1);}
     for(let k=0;k<3;k++){
       const b=el('circle',{r:5,fill:'#ffd54f',stroke:'#fff','stroke-width':1.5},map);
       const am=el('animateMotion',{dur:'5s',repeatCount:'indefinite',begin:(k*1.7)+'s',rotate:'auto'},b);
-      const mp=el('mpath',{href:'#path-'+a.line},am);
-      mp.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href','#path-'+a.line);
+      const mp=el('mpath',{href:'#path-'+lineId},am);
+      mp.setAttributeNS('http://www.w3.org/1999/xlink','xlink:href','#path-'+lineId);
       b.appendChild(am);
     }
   });
@@ -598,14 +613,15 @@ function renderAlerts(){
 }
 function renderActions(){
   const box=document.getElementById('actList');
-  box.innerHTML=ACTIONS.map(a=>
+  box.innerHTML=activeActions().map(a=>
     '<div class="act"><span class="badge">'+a.type+'</span><div style="flex:1;min-width:0"><div class="at">'+a.title+'</div><div class="ad">'+a.detail+'</div><div class="basis">💡 决策依据 · 可解释AI：'+a.basis+'</div></div><span class="ae">'+a.effect+'</span></div>'
   ).join('');
 }
 
 // ===== 工具调用轨迹（可解释的工具调用链路）=====
 const TOOL_CALLS={
-  2:['感知智能体 → 调用 多源数据API（景区预约/天气/GPS/刷卡）… 成功'],
+  1:['感知智能体 → 调用 多源数据API（景区预约/天气/GPS/刷卡）… 成功'],
+  2:['预测智能体 → 调用 潮汐预测引擎：完成分时、分线、分站客流预测 … 成功'],
   3:['决策智能体 → 调用 排班系统API：读取当前排班与运力 … 成功','决策智能体 → 调用 运力调度引擎：生成弹性调度方案 … 成功','决策智能体 → 调用 仿真回测API：评估方案效果 … 成功'],
   4:['执行智能体 → 调用 车载终端API：下发调度指令 … 成功','执行智能体 → 调用 调度中心大屏API：刷新视图 … 成功'],
   5:['评估智能体 → 调用 效果评估API：闭环指标回测 … 成功']
@@ -676,7 +692,7 @@ function updateHourStat(){
 }
 function renderChips(){
   const el2=document.getElementById('spotChips');
-  el2.innerHTML=SPOTS.map(s=>'<span class="chip'+(s.id===cur?' active':'')+'" data-id="'+s.id+'">'+s.name+'</span>').join('');
+  el2.innerHTML=SPOTS.map(s=>'<button type="button" class="chip'+(s.id===cur?' active':'')+'" data-id="'+s.id+'" aria-pressed="'+(s.id===cur)+'">'+s.name+'</button>').join('');
   el2.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{cur=c.dataset.id;renderChips();drawForecast(cur,false);});
 }
 function selectSpot(id){cur=id;renderChips();drawForecast(cur,false);}
@@ -695,9 +711,10 @@ function setStage(n, trace){
   stage=n;
   if(trace && TOOL_CALLS[n]) pushToolCalls(TOOL_CALLS[n]);
   for(let i=1;i<=5;i++){const st=document.getElementById('st'+i);st.classList.remove('on','done');if(i<n)st.classList.add('done');else if(i===n)st.classList.add('on');}
+  if(n===1){status.textContent='① 感知智能体：正在汇聚景区预约、天气、GPS 与刷卡聚合数据';}
   if(n>=2){renderMapCongestion();renderAlerts();applyLineLoadColors();drawForecast(cur,true);status.textContent='② 预测智能体：分区分景区潮汐客流预测完成，地图按当前时刻标注拥堵范围，右侧生成实时预警';}
   if(n>=3){showDispatch();renderActions();disBtn.disabled=false;status.textContent='③ 决策智能体：生成弹性调度指令（区间车/接驳车/快线/车辆预置），可一键下发';}
-  if(n===4){document.getElementById('execInfo').innerHTML='⚙️ 执行智能体：调度指令已下发至车载终端与调度中心，地图线路高亮、车辆动态运行。';document.getElementById('kpiPlan').textContent=ACTIONS.length+' 项';status.textContent='④ 执行智能体：指令下发完成，运力动态调配中';}
+  if(n===4){document.getElementById('execInfo').innerHTML='⚙️ 执行智能体：调度指令已下发至车载终端与调度中心，地图线路高亮、车辆动态运行。';document.getElementById('kpiPlan').textContent=activeActions().length+' 项';status.textContent='④ 执行智能体：指令下发完成，运力动态调配中';}
   if(n===5){document.getElementById('execInfo').innerHTML='📊 评估智能体：仿真回测通过，高峰疏运 +42%、满载率 -18%，形成「感知—预测—决策—执行—评估」闭环。';status.textContent='⑤ 评估智能体：仿真回测通过，闭环优化完成';disBtn.disabled=true;runBtn.disabled=true;runBtn.textContent='✓ 推演完成';}
 }
 function syncTime(){hourLabel.textContent=pad2(hour)+':00';renderMapCongestion();renderAlerts();applyLineLoadColors();drawForecast(cur,false);}
@@ -724,6 +741,7 @@ document.querySelectorAll('#cmpSeg button').forEach(b=>{
 
 // ===== 导出调度指令单（打印/存PDF）=====
 function buildPrintSheet(){
+  const safe=value=>String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const now=new Date();
   const p2=n=>('0'+n).slice(-2);
   const t=now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate())+' '+p2(now.getHours())+':'+p2(now.getMinutes());
@@ -733,10 +751,11 @@ function buildPrintSheet(){
     const lv=o.it>0.6?'重度':'中度',col=o.it>0.6?'#f5222d':'#ff7a45';
     return '<li><span class="ps-tag" style="background:'+col+'">'+lv+'</span><span style="font-weight:600">'+spotById[o.p.spot].name+'</span><span style="color:#5b6b7c">'+o.p.line+'</span><span style="margin-left:auto;color:#5b6b7c">'+o.p.note+'</span></li>';
   }).join(''):'<li style="color:#5b6b7c">当前时刻预测畅通，无拥堵预警</li>';
-  const rows=ACTIONS.map(a=>'<tr><td>'+a.type+'</td><td>'+a.title+'<div style="font-size:11px;color:#5b6b7c;margin-top:3px">决策依据：'+a.basis+'</div></td><td>'+a.detail+'</td><td class="eff">'+a.effect+'</td></tr>').join('');
+  const currentActions=activeActions();
+  const rows=currentActions.map(a=>'<tr><td>'+safe(a.type)+'</td><td>'+safe(a.title)+'<div style="font-size:11px;color:#5b6b7c;margin-top:3px">决策依据：'+safe(a.basis)+'</div></td><td>'+safe(a.detail)+'</td><td class="eff">'+safe(a.effect)+'</td></tr>').join('');
   let bs=0,af=0,worst='';
   LINES.forEach(L=>{const b=lineLoadBefore(L.id);if(b>bs){bs=b;af=lineLoadAfter(L.id);worst=L.name;}});
-  const stTxt=dispatched?('已下发 '+ACTIONS.length+' 项，运力动态调配中'):'待下发（点击「一键下发调度指令」执行）';
+  const stTxt=dispatched?('已下发 '+currentActions.length+' 项，运力动态调配中'):'待下发（点击「一键下发调度指令」执行）';
   const loopTxt=dispatched
     ? '执行智能体已将指令下发至车载终端与调度中心，地图线路高亮、车辆动态运行；评估智能体仿真回测：高峰疏运 +42%、满载率 -18%，形成「感知—预测—决策—执行—评估」闭环。'
     : '指令待调度员确认下发后，系统将自动下发至车载终端并回测评估效果。';
@@ -778,7 +797,7 @@ function resetState(full){
   document.getElementById('kpiPlan').textContent='0 项';
   dispatchShown=false;
   dispatched=false;
-  hour=9; scenario='peak'; timeSlider.value=9; hourLabel.textContent='09:00'; scSel.value='peak';
+  if(full){hour=9;scenario='peak';timeSlider.value=9;hourLabel.textContent='09:00';scSel.value='peak';}
   compareMode='off'; document.querySelectorAll('#cmpSeg button').forEach(x=>x.classList.toggle('active',x.dataset.m==='off'));
   runBtn.disabled=false; runBtn.textContent='▶ 运行智能体推演';
   disBtn.disabled=true;

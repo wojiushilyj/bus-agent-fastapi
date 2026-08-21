@@ -18,30 +18,69 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 }
 
 SPOTS: list[dict[str, Any]] = [
-    {"id": "xs", "name": "象山景区", "x": 205, "y": 100, "group": "gl", "latitude": 25.2672, "longitude": 110.2941},
-    {"id": "ljs", "name": "两江四湖·夜游", "x": 300, "y": 135, "group": "gl", "latitude": 25.2814, "longitude": 110.2925},
-    {"id": "ljj", "name": "漓江/磨盘山码头", "x": 375, "y": 78, "group": "gl", "latitude": 25.0770, "longitude": 110.4380},
-    {"id": "ldy", "name": "芦笛岩", "x": 120, "y": 72, "group": "gl", "latitude": 25.3156, "longitude": 110.2535},
-    {"id": "qx", "name": "七星景区", "x": 405, "y": 165, "group": "gl", "latitude": 25.2784, "longitude": 110.3154},
-    {"id": "wj", "name": "靖江王城·东西巷", "x": 260, "y": 190, "group": "gl", "latitude": 25.2862, "longitude": 110.2986},
-    {"id": "xj", "name": "阳朔西街", "x": 330, "y": 375, "group": "ys", "latitude": 24.7786, "longitude": 110.4967},
-    {"id": "ylh", "name": "遇龙河", "x": 240, "y": 408, "group": "ys", "latitude": 24.7865, "longitude": 110.4240},
-    {"id": "sj", "name": "十里画廊", "x": 430, "y": 388, "group": "ys", "latitude": 24.7396, "longitude": 110.4867},
-    {"id": "xp", "name": "兴坪古镇", "x": 485, "y": 428, "group": "ys", "latitude": 24.9181, "longitude": 110.5296},
+    {
+        "id": "xs", "name": "象山景区", "x": 205, "y": 100, "group": "gl",
+        "latitude": 25.2672, "longitude": 110.2941,
+    },
+    {
+        "id": "ljs", "name": "两江四湖·夜游", "x": 300, "y": 135, "group": "gl",
+        "latitude": 25.2814, "longitude": 110.2925,
+    },
+    {
+        "id": "ljj", "name": "漓江/磨盘山码头", "x": 375, "y": 78, "group": "gl",
+        "latitude": 25.0770, "longitude": 110.4380,
+    },
+    {
+        "id": "ldy", "name": "芦笛岩", "x": 120, "y": 72, "group": "gl",
+        "latitude": 25.3156, "longitude": 110.2535,
+    },
+    {
+        "id": "qx", "name": "七星景区", "x": 405, "y": 165, "group": "gl",
+        "latitude": 25.2784, "longitude": 110.3154,
+    },
+    {
+        "id": "wj", "name": "靖江王城·东西巷", "x": 260, "y": 190, "group": "gl",
+        "latitude": 25.2862, "longitude": 110.2986,
+    },
+    {
+        "id": "xj", "name": "阳朔西街", "x": 330, "y": 375, "group": "ys",
+        "latitude": 24.7786, "longitude": 110.4967,
+    },
+    {
+        "id": "ylh", "name": "遇龙河", "x": 240, "y": 408, "group": "ys",
+        "latitude": 24.7865, "longitude": 110.4240,
+    },
+    {
+        "id": "sj", "name": "十里画廊", "x": 430, "y": 388, "group": "ys",
+        "latitude": 24.7396, "longitude": 110.4867,
+    },
+    {
+        "id": "xp", "name": "兴坪古镇", "x": 485, "y": 428, "group": "ys",
+        "latitude": 24.9181, "longitude": 110.5296,
+    },
 ]
 
 LINES: list[dict[str, Any]] = [
     {
         "id": "L1", "name": "旅游专线1", "color": "#1e6fff", "spot_ids": ["xs", "ljs"],
-        "route": [[25.3156, 110.2535], [25.2672, 110.2941], [25.2814, 110.2925], [25.2862, 110.2986], [25.2784, 110.3154]],
+        "route": [
+            [25.3156, 110.2535], [25.2672, 110.2941], [25.2814, 110.2925],
+            [25.2862, 110.2986], [25.2784, 110.3154],
+        ],
     },
     {
         "id": "L2", "name": "阳朔环线", "color": "#00b386", "spot_ids": ["xj"],
-        "route": [[24.7786, 110.4967], [24.7396, 110.4867], [24.9181, 110.5296], [24.7865, 110.4240], [24.7786, 110.4967]],
+        "route": [
+            [24.7786, 110.4967], [24.7396, 110.4867], [24.9181, 110.5296],
+            [24.7865, 110.4240], [24.7786, 110.4967],
+        ],
     },
     {
         "id": "L3", "name": "跨区直通车", "color": "#ff7a45", "spot_ids": ["ljj"],
-        "route": [[25.0770, 110.4380], [25.0100, 110.4510], [24.9300, 110.4750], [24.8500, 110.4930], [24.7786, 110.4967]],
+        "route": [
+            [25.0770, 110.4380], [25.0100, 110.4510], [24.9300, 110.4750],
+            [24.8500, 110.4930], [24.7786, 110.4967],
+        ],
     },
     {
         "id": "L4", "name": "接驳摆渡", "color": "#7c4dff", "spot_ids": ["xj"],
@@ -87,6 +126,16 @@ LINE_BY_ID = {item["id"]: item for item in LINES}
 PROFILE_BY_SPOT = {item["spot_id"]: item for item in CONGESTION_PROFILES}
 
 
+def _require_scenario(scenario: str) -> None:
+    if scenario not in SCENARIOS:
+        raise ValueError(f"未知场景：{scenario}")
+
+
+def _require_spot(spot_id: str) -> None:
+    if spot_id not in SPOT_BY_ID:
+        raise ValueError(f"未知景区/站点：{spot_id}")
+
+
 def _shape(peaks: list[tuple[int, int]], base: int = 4) -> list[int]:
     values = [float(base)] * 24
     for peak_hour, weight in peaks:
@@ -100,16 +149,24 @@ BASE_FORECASTS = {spot_id: _shape(peaks) for spot_id, peaks in FORECAST_PEAKS.it
 
 
 def scenario_curve(base: list[int], scenario: str) -> list[int]:
+    _require_scenario(scenario)
     if scenario == "normal":
         return list(base)
     if scenario == "peak":
         return [round(value * 1.9) for value in base]
     if scenario == "event":
         return [round(value * (2.4 if value > 10 else 1.2) + (20 if value > 40 else 0)) for value in base]
-    return [round(value * 1.2 + 150 * math.exp(-((hour - 21) ** 2) / 3)) for hour, value in enumerate(base)]
+    if scenario == "burst":
+        return [
+            round(value * 1.2 + 150 * math.exp(-((hour - 21) ** 2) / 3))
+            for hour, value in enumerate(base)
+        ]
+    raise AssertionError("场景校验分支不完整")
 
 
 def forecast(spot_id: str, scenario: str) -> dict[str, Any]:
+    _require_spot(spot_id)
+    _require_scenario(scenario)
     base = BASE_FORECASTS[spot_id]
     selected = scenario_curve(base, scenario)
     return {
@@ -124,6 +181,9 @@ def forecast(spot_id: str, scenario: str) -> dict[str, Any]:
 
 
 def congestion_intensity(profile: dict[str, Any], hour: int, scenario: str) -> float:
+    _require_scenario(scenario)
+    if not 0 <= hour <= 23:
+        raise ValueError("hour 必须在 0 到 23 之间")
     gaussian = max(
         weight * math.exp(-((hour - peak_hour) ** 2) / 5)
         for peak_hour, weight in profile["peaks"]
@@ -149,6 +209,9 @@ def _line_loads(hour: int, scenario: str) -> dict[str, dict[str, float]]:
 
 
 def snapshot(hour: int, scenario: str) -> dict[str, Any]:
+    _require_scenario(scenario)
+    if not 0 <= hour <= 23:
+        raise ValueError("hour 必须在 0 到 23 之间")
     alerts: list[dict[str, Any]] = []
     for profile in CONGESTION_PROFILES:
         intensity = congestion_intensity(profile, hour, scenario)
@@ -198,6 +261,7 @@ def _daily_peak_load(line_id: str, scenario: str) -> tuple[int, float]:
 
 
 def generate_actions(scenario: str) -> list[dict[str, Any]]:
+    _require_scenario(scenario)
     peaks = {line_id: _daily_peak_load(line_id, scenario) for line_id in LINE_BY_ID}
     templates = [
         {
@@ -235,7 +299,7 @@ def generate_actions(scenario: str) -> list[dict[str, Any]]:
         action = {key: value for key, value in template.items() if key != "basis_prefix"}
         action["basis"] = (
             f'{template["basis_prefix"]}，{line_name} {peak_hour:02d}:00 预测满载率 '
-            f'<b>{round(peak_load * 100)}%</b>（≥78%）→ 触发{template["type"]}策略'
+            f'{round(peak_load * 100)}%（≥78%）→ 触发{template["type"]}策略'
         )
         actions.append(action)
     max_peak = max(load for _, load in peaks.values())
@@ -248,19 +312,22 @@ def generate_actions(scenario: str) -> list[dict[str, Any]]:
                 "effect": "就绪 100%",
                 "line_id": None,
                 "basis": "全日峰值满载率达到 "
-                f"<b>{round(max_peak * 100)}%</b>，预测运力缺口 <b>12 标台</b> → 提前预置 + 充电",
+                f"{round(max_peak * 100)}%，预测运力缺口 12 标台 → 提前预置 + 充电",
             }
         )
     return actions
 
 
 def metrics_for(scenario: str, action_count: int) -> dict[str, Any]:
+    _require_scenario(scenario)
+    if action_count < 0:
+        raise ValueError("action_count 不能为负数")
     return {
         "predicted_passengers": SCENARIOS[scenario]["predicted_total"],
         "capacity_increase_percent": 42,
         "load_reduction_percent": 18,
         "average_wait_reduction_minutes": 6.5,
-        "covered_spots": 11,
+        "covered_spots": len(SPOTS),
         "action_count": action_count,
     }
 
