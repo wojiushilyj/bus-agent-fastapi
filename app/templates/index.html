@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>公交文旅潮汐客流预测与弹性调度智能体 · 调度指挥中心原型</title>
+<title>公交文旅潮汐客流预测与弹性调度智能体 · 调度指挥中心</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
   :root{
     --bg:#eef1f6; --panel:#ffffff; --ink:#1f2d3d; --sub:#5b6b7c;
@@ -35,6 +36,11 @@
   #dispatchBtn:disabled{opacity:.4;cursor:default;}
   #resetBtn{background:#fff;color:var(--sub);border:1px solid var(--line);padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;}
   #runStatus{font-size:13px;color:var(--sub);flex:1;min-width:200px;}
+  .service-meta{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--sub);white-space:nowrap;}
+  .service-pill{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:3px 8px;}
+  .service-dot{width:7px;height:7px;border-radius:50%;background:#9aa7b5;box-shadow:0 0 0 3px rgba(154,167,181,.12);}
+  .service-dot.ok{background:var(--brand2);box-shadow:0 0 0 3px rgba(0,179,134,.12);}
+  .service-dot.err{background:var(--danger);box-shadow:0 0 0 3px rgba(245,34,45,.12);}
   .ctrlbar{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px;flex-wrap:wrap;font-size:13px;color:var(--sub);}
   .ctrlbar label{font-weight:600;color:var(--ink);}
   .ctrlbar select{padding:6px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;color:var(--ink);background:#fff;}
@@ -51,12 +57,23 @@
   .st.on .t{color:var(--brand);}
   .st.done .n{background:var(--brand2);color:#fff;}
   .cmd{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;}
-  .mapwrap{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:linear-gradient(180deg,#f4f9ff,#eef6ff);}
-  #map{width:100%;height:auto;display:block;}
-  .maphead{position:absolute;top:10px;left:12px;font-size:13px;font-weight:700;color:var(--ink);background:rgba(255,255,255,.8);padding:4px 10px;border-radius:8px;}
-  .mapnote{position:absolute;bottom:8px;right:10px;font-size:10px;color:var(--sub);background:rgba(255,255,255,.7);padding:2px 7px;border-radius:6px;}
-  .maplegend{position:absolute;top:10px;right:12px;background:rgba(255,255,255,.86);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--sub);line-height:1.7;}
+  .mapwrap{position:relative;min-height:470px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:linear-gradient(180deg,#f4f9ff,#eef6ff);}
+  #geoMap{position:absolute;inset:0;z-index:1;opacity:0;transition:opacity .25s ease;background:#eef4fc;}
+  #map{position:relative;z-index:2;width:100%;height:auto;display:block;}
+  .mapwrap.geo-ready #geoMap{opacity:1;}
+  .mapwrap.geo-ready #map{display:none;}
+  .mapwrap.force-schematic #geoMap{opacity:0;pointer-events:none;}
+  .mapwrap.force-schematic #map{display:block;}
+  .maphead{position:absolute;top:10px;left:54px;z-index:700;font-size:13px;font-weight:700;color:var(--ink);background:rgba(255,255,255,.9);padding:4px 10px;border-radius:8px;box-shadow:0 2px 8px rgba(31,45,61,.08);}
+  .mapnote{position:absolute;bottom:8px;right:10px;z-index:700;font-size:10px;color:var(--sub);background:rgba(255,255,255,.88);padding:2px 7px;border-radius:6px;}
+  .maplegend{position:absolute;top:10px;right:12px;z-index:700;background:rgba(255,255,255,.92);border-radius:8px;padding:8px 10px;font-size:11px;color:var(--sub);line-height:1.7;box-shadow:0 2px 8px rgba(31,45,61,.08);}
   .maplegend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:5px;vertical-align:-1px;}
+  #mapModeBtn{position:absolute;left:12px;bottom:10px;z-index:700;border:1px solid var(--line);background:rgba(255,255,255,.94);color:var(--brand);padding:5px 9px;border-radius:7px;font-size:10.5px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(31,45,61,.08);}
+  .geo-spot-label{background:rgba(255,255,255,.92);border:1px solid #d7dee8;border-radius:5px;color:#1f2d3d;font-size:10px;font-weight:600;padding:2px 5px;box-shadow:0 1px 4px rgba(31,45,61,.15);}
+  .geo-spot-label::before{display:none;}
+  .geo-bus{font-size:17px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));transform:translate(-3px,-4px);}
+  .geo-congestion-pulse{animation:geoPulse 2.4s ease-in-out infinite;transform-origin:center;}
+  @keyframes geoPulse{0%,100%{fill-opacity:.12;stroke-opacity:.7;}50%{fill-opacity:.28;stroke-opacity:1;}}
   .panel-right{display:flex;flex-direction:column;gap:12px;}
   .box-r{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fcfdff;}
   .box-r h4{font-size:13.5px;margin-bottom:9px;display:flex;align-items:center;gap:6px;}
@@ -109,7 +126,7 @@
   .cmp .big{font-size:19px;font-weight:700;}
   .cmp .from{color:var(--danger);} .cmp .to{color:var(--brand2);} .cmp .arrow{color:var(--sub);font-size:12px;}
   .cmp b{color:var(--ink);}
-  .loadlegend{position:absolute;bottom:8px;left:12px;background:rgba(255,255,255,.9);border-radius:8px;padding:6px 9px;font-size:10px;color:var(--sub);display:none;z-index:5;}
+  .loadlegend{position:absolute;bottom:44px;left:12px;background:rgba(255,255,255,.92);border-radius:8px;padding:6px 9px;font-size:10px;color:var(--sub);display:none;z-index:700;}
   .loadlegend .bar{height:9px;width:140px;background:linear-gradient(90deg,#1ec96b,#7bd13a,#ffd54f,#ff9f43,#f5222d);border-radius:5px;margin:4px 0 2px;}
   .loadlegend .scale{display:flex;justify-content:space-between;width:140px;font-size:9px;}
   #exportBtn{background:#fff;color:var(--brand);border:1px solid var(--brand);padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;}
@@ -136,6 +153,20 @@
   .tt-line .tt-dot{width:7px;height:7px;border-radius:50%;background:#39d98a;flex:none;box-shadow:0 0 6px #39d98a;}
   @keyframes ttIn{to{opacity:1;transform:translateY(0);}}
   .tt-empty{color:#6b86b3;font-family:"Microsoft YaHei",sans-serif;}
+  .history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .history-head h3{margin:0!important;}
+  #historyRefresh{border:1px solid var(--line);background:#fff;color:var(--brand);border-radius:7px;padding:5px 10px;font-size:11px;cursor:pointer;}
+  .history-table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:9px;background:#fff;}
+  .history-table{width:100%;border-collapse:collapse;font-size:11.5px;min-width:720px;}
+  .history-table th,.history-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;}
+  .history-table th{color:var(--sub);font-weight:600;background:#f7f9fc;}
+  .history-table tr:last-child td{border-bottom:none;}
+  .history-status{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:700;}
+  .history-status.planned{background:#fff7e6;color:#d46b08;}
+  .history-status.dispatched{background:#e6f7ff;color:#096dd9;}
+  .history-status.evaluated{background:#e8f8f2;color:#00875f;}
+  .history-load{font-weight:700;color:var(--danger);}
+  .history-load-after{color:var(--brand2);}
   /* ===== 大屏 / 全屏指挥模式 ===== */
   #fullBtn{background:#0f1f3a;color:#fff;border:none;padding:9px 14px;border-radius:8px;font-size:13px;cursor:pointer;font-weight:600;}
   #fullBtn:hover{background:#173056;}
@@ -144,10 +175,10 @@
   body.fs header,body.fs .subnav,body.fs .foot,body.fs main>section:not(#demo){display:none!important;}
   body.fs main{max-width:none;padding:0;margin:0;}
   body.fs #demo{height:100vh;max-height:100vh;overflow:hidden;display:flex;flex-direction:column;margin:0;border:none;border-radius:0;padding:14px 18px;}
-  body.fs #forecastPanel{display:none!important;}
+  body.fs #forecastPanel,body.fs #historyPanel{display:none!important;}
   body.fs .cmd{grid-template-columns:2.15fr 1fr;flex:1;min-height:0;margin-bottom:0;}
   body.fs .mapwrap{height:100%;}
-  body.fs #map{height:100%;width:100%;}
+  body.fs #map,body.fs #geoMap{height:100%;width:100%;}
   body.fs .panel-right{overflow:auto;}
   body.fs .cards{margin-bottom:8px;}
   body.fs .runbar,body.fs .ctrlbar,body.fs .cmpbar,body.fs .stepper,body.fs .tooltrace{margin-bottom:8px;}
@@ -157,16 +188,17 @@
     #printSheet{display:block!important;}
     @page{size:A4;margin:14mm;}
   }
-  @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr);}.cmd{grid-template-columns:1fr;}.twocol,.land,.layer{grid-template-columns:1fr;}}
+  @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr);}.cmd{grid-template-columns:1fr;}.twocol,.land,.layer{grid-template-columns:1fr;}.mapwrap{min-height:430px;}.maplegend{top:46px;right:8px;}.maphead{left:48px;}}
 </style>
 </head>
 <body>
 <header>
   <h1>🚌 公交文旅潮汐客流预测与弹性调度智能体</h1>
-  <span class="tag">调度指挥中心原型 · 单页演示版（模拟数据）</span>
+  <span class="tag">调度指挥中心运行版 · FastAPI + SQLite</span>
 </header>
 <nav class="subnav">
   <a href="#demo">▸ 调度指挥中心</a>
+  <a href="#historyPanel">推演记录</a>
   <a href="#arch">多智能体架构</a>
   <a href="#value">应用价值</a>
   <a href="#tech">技术架构</a>
@@ -180,7 +212,7 @@
 
     <!-- 头条指标 -->
     <div class="cards">
-      <div class="kpi"><div class="v">38.6万</div><div class="l">今日预测文旅接驳客流</div></div>
+      <div class="kpi"><div class="v" id="kpiPassengers">38.6万</div><div class="l">今日预测文旅接驳客流</div></div>
       <div class="kpi warn"><div class="v" id="kpiAlert">—</div><div class="l">当前时刻拥堵预警线路</div></div>
       <div class="kpi green"><div class="v">+42%</div><div class="l">高峰疏运能力提升</div></div>
       <div class="kpi green"><div class="v">-18%</div><div class="l">线路满载率下降</div></div>
@@ -196,6 +228,7 @@
       <button id="exportBtn">🖨 导出调度指令单</button>
       <button id="fullBtn">🖥 全屏指挥</button>
       <span id="runStatus">点击「运行智能体推演」观看全链路；或直接拖动下方时刻滑块、切换场景自主探查</span>
+      <span class="service-meta"><span class="service-pill"><i class="service-dot" id="serviceDot"></i><span id="serviceText">服务连接中</span></span><span id="dataTime">数据时间 —</span></span>
     </div>
 
     <!-- 时刻 + 场景控制（调度员自主探查） -->
@@ -262,8 +295,10 @@
           <div class="bar"></div>
           <div class="scale"><span>60%</span><span>80%</span><span>100%</span></div>
         </div>
+        <div id="geoMap" role="region" aria-label="桂林至阳朔文旅公交真实底图"></div>
         <svg id="map" viewBox="0 0 680 470" width="100%"></svg>
-        <div class="mapnote">示意图（非地理精确），用于演示调度决策可视化</div>
+        <button id="mapModeBtn" type="button">切换示意图</button>
+        <div class="mapnote" id="mapNote">正在加载真实底图，失败时自动使用线网示意图</div>
       </div>
 
       <div class="panel-right">
@@ -289,6 +324,14 @@
       <div id="spotInfo" style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap;"></div>
       <div class="legend"><span><i style="background:#1e6fff"></i>旅游高峰日</span><span><i style="background:#00b386"></i>平日</span><span><i style="background:#ff7a45"></i>大型活动日</span><span style="color:var(--ink);font-weight:600;">▏当前时刻游标</span></div>
       <svg id="chart-forecast" viewBox="0 0 640 280" width="100%"></svg>
+    </div>
+
+    <div class="panel" id="historyPanel" style="margin:16px 0 0;background:var(--soft);">
+      <div class="history-head">
+        <h3 style="font-size:14px;">近期推演记录 <span class="score" id="historyCount">SQLite 持久化</span></h3>
+        <button id="historyRefresh" type="button">↻ 刷新记录</button>
+      </div>
+      <div id="historyList"><div class="empty">正在读取历史推演记录…</div></div>
     </div>
   </section>
 
@@ -371,7 +414,7 @@
   </section>
 
 </main>
-<div class="foot">桂林市规划设计研究院 · 2026“A超”交通创新大赛 国际赛道（创新赛道）参赛原型 · 调度指挥中心视角 · 模拟数据仅用于演示</div>
+<div class="foot">桂林市规划设计研究院 · 2026“A超”交通创新大赛 · 调度指挥中心运行版 · 当前采用聚合样例数据与可解释规则模型</div>
 <button class="fs-exit" id="fsExit">✕ 退出全屏指挥</button>
 
 <!-- 调度指令单（仅打印/导出PDF时显示） -->
@@ -747,6 +790,7 @@ function resetState(full){
 // 初始化
 buildMap(); renderChips(); renderMapCongestion(); renderAlerts(); applyLineLoadColors(); drawForecast(cur,false);
 </script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script src="/static/api-client.js"></script>
 </body>
 </html>

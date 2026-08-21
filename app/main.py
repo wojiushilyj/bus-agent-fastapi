@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -131,7 +132,20 @@ def health() -> dict:
 
 @app.get("/api/config")
 def config() -> dict:
-    return {"scenarios": SCENARIOS, "spots": SPOTS, "lines": LINES}
+    return {
+        "scenarios": SCENARIOS,
+        "spots": SPOTS,
+        "lines": LINES,
+        "map": {
+            "bounds": [[24.70, 110.20], [25.36, 110.57]],
+            "tile_url": os.getenv("MAP_TILE_URL", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
+            "tile_attribution": os.getenv(
+                "MAP_TILE_ATTRIBUTION",
+                '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            ),
+            "max_zoom": 19,
+        },
+    }
 
 
 @app.get("/api/snapshot")
@@ -139,7 +153,9 @@ def get_snapshot(
     hour: int = Query(default=9, ge=0, le=23),
     scenario: ScenarioName = "peak",
 ) -> dict:
-    return snapshot(hour, scenario)
+    result = snapshot(hour, scenario)
+    result["generated_at"] = utc_now()
+    return result
 
 
 @app.get("/api/forecast")
@@ -154,6 +170,7 @@ def create_simulation(payload: SimulationCreate) -> dict:
     simulation_id = uuid4().hex
     created_at = utc_now()
     current_snapshot = snapshot(payload.hour, payload.scenario)
+    current_snapshot["generated_at"] = created_at
     actions = generate_actions(payload.scenario)
     metrics = metrics_for(payload.scenario, len(actions))
     worst = current_snapshot["worst_line"]
@@ -206,17 +223,20 @@ def create_simulation(payload: SimulationCreate) -> dict:
 @app.get("/api/simulations")
 def list_simulations(limit: int = Query(default=20, ge=1, le=100)) -> dict:
     with database.connect() as connection:
+        total = connection.execute("SELECT COUNT(*) FROM simulations").fetchone()[0]
         rows = connection.execute(
             """
             SELECT id, scenario, hour, spot_id, status, alert_count, worst_line,
-                   before_load, after_load, created_at, updated_at, dispatched_at, evaluated_at
+                   before_load, after_load, created_at, updated_at, dispatched_at, evaluated_at,
+                   (SELECT COUNT(*) FROM dispatch_actions AS action
+                    WHERE action.simulation_id = simulations.id) AS action_count
             FROM simulations
             ORDER BY created_at DESC
             LIMIT ?
             """,
             (limit,),
         ).fetchall()
-    return {"items": [dict(row) for row in rows], "count": len(rows)}
+    return {"items": [dict(row) for row in rows], "count": len(rows), "total": total}
 
 
 @app.get("/api/simulations/{simulation_id}")

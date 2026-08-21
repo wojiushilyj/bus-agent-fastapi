@@ -18,23 +18,35 @@ SCENARIOS: dict[str, dict[str, Any]] = {
 }
 
 SPOTS: list[dict[str, Any]] = [
-    {"id": "xs", "name": "象山景区", "x": 205, "y": 100, "group": "gl"},
-    {"id": "ljs", "name": "两江四湖·夜游", "x": 300, "y": 135, "group": "gl"},
-    {"id": "ljj", "name": "漓江/磨盘山码头", "x": 375, "y": 78, "group": "gl"},
-    {"id": "ldy", "name": "芦笛岩", "x": 120, "y": 72, "group": "gl"},
-    {"id": "qx", "name": "七星景区", "x": 405, "y": 165, "group": "gl"},
-    {"id": "wj", "name": "靖江王城·东西巷", "x": 260, "y": 190, "group": "gl"},
-    {"id": "xj", "name": "阳朔西街", "x": 330, "y": 375, "group": "ys"},
-    {"id": "ylh", "name": "遇龙河", "x": 240, "y": 408, "group": "ys"},
-    {"id": "sj", "name": "十里画廊", "x": 430, "y": 388, "group": "ys"},
-    {"id": "xp", "name": "兴坪古镇", "x": 485, "y": 428, "group": "ys"},
+    {"id": "xs", "name": "象山景区", "x": 205, "y": 100, "group": "gl", "latitude": 25.2672, "longitude": 110.2941},
+    {"id": "ljs", "name": "两江四湖·夜游", "x": 300, "y": 135, "group": "gl", "latitude": 25.2814, "longitude": 110.2925},
+    {"id": "ljj", "name": "漓江/磨盘山码头", "x": 375, "y": 78, "group": "gl", "latitude": 25.0770, "longitude": 110.4380},
+    {"id": "ldy", "name": "芦笛岩", "x": 120, "y": 72, "group": "gl", "latitude": 25.3156, "longitude": 110.2535},
+    {"id": "qx", "name": "七星景区", "x": 405, "y": 165, "group": "gl", "latitude": 25.2784, "longitude": 110.3154},
+    {"id": "wj", "name": "靖江王城·东西巷", "x": 260, "y": 190, "group": "gl", "latitude": 25.2862, "longitude": 110.2986},
+    {"id": "xj", "name": "阳朔西街", "x": 330, "y": 375, "group": "ys", "latitude": 24.7786, "longitude": 110.4967},
+    {"id": "ylh", "name": "遇龙河", "x": 240, "y": 408, "group": "ys", "latitude": 24.7865, "longitude": 110.4240},
+    {"id": "sj", "name": "十里画廊", "x": 430, "y": 388, "group": "ys", "latitude": 24.7396, "longitude": 110.4867},
+    {"id": "xp", "name": "兴坪古镇", "x": 485, "y": 428, "group": "ys", "latitude": 24.9181, "longitude": 110.5296},
 ]
 
 LINES: list[dict[str, Any]] = [
-    {"id": "L1", "name": "旅游专线1", "color": "#1e6fff", "spot_ids": ["xs", "ljs"]},
-    {"id": "L2", "name": "阳朔环线", "color": "#00b386", "spot_ids": ["xj"]},
-    {"id": "L3", "name": "跨区直通车", "color": "#ff7a45", "spot_ids": ["ljj"]},
-    {"id": "L4", "name": "接驳摆渡", "color": "#7c4dff", "spot_ids": ["xj"]},
+    {
+        "id": "L1", "name": "旅游专线1", "color": "#1e6fff", "spot_ids": ["xs", "ljs"],
+        "route": [[25.3156, 110.2535], [25.2672, 110.2941], [25.2814, 110.2925], [25.2862, 110.2986], [25.2784, 110.3154]],
+    },
+    {
+        "id": "L2", "name": "阳朔环线", "color": "#00b386", "spot_ids": ["xj"],
+        "route": [[24.7786, 110.4967], [24.7396, 110.4867], [24.9181, 110.5296], [24.7865, 110.4240], [24.7786, 110.4967]],
+    },
+    {
+        "id": "L3", "name": "跨区直通车", "color": "#ff7a45", "spot_ids": ["ljj"],
+        "route": [[25.0770, 110.4380], [25.0100, 110.4510], [24.9300, 110.4750], [24.8500, 110.4930], [24.7786, 110.4967]],
+    },
+    {
+        "id": "L4", "name": "接驳摆渡", "color": "#7c4dff", "spot_ids": ["xj"],
+        "route": [[24.7786, 110.4967], [24.7820, 110.4590], [24.7865, 110.4240]],
+    },
 ]
 
 CONGESTION_PROFILES: list[dict[str, Any]] = [

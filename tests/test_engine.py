@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from app.engine import forecast, generate_actions, snapshot
+from app.engine import LINES, SPOTS, forecast, generate_actions, snapshot
 
 
 class EngineTests(unittest.TestCase):
@@ -20,6 +20,11 @@ class EngineTests(unittest.TestCase):
         actions = generate_actions("peak")
         self.assertEqual(len(actions), 4)
         self.assertTrue(all(action["basis"] for action in actions))
+
+    def test_map_configuration_has_real_coordinates_and_routes(self) -> None:
+        self.assertTrue(all(-90 <= spot["latitude"] <= 90 for spot in SPOTS))
+        self.assertTrue(all(-180 <= spot["longitude"] <= 180 for spot in SPOTS))
+        self.assertTrue(all(len(line["route"]) >= 2 for line in LINES))
 
 
 if __name__ == "__main__":
