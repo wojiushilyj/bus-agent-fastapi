@@ -107,10 +107,30 @@ class HttpSmokeTests(unittest.TestCase):
     def test_health_and_security_headers(self) -> None:
         data, headers = self.request("/api/health")
         self.assertEqual(data["status"], "ok")
-        self.assertEqual(data["version"], "1.1.0")
+        self.assertEqual(data["version"], "1.2.0")
+        self.assertEqual(data["transit_route_count"], 5)
         self.assertEqual(headers["cache-control"], "no-store")
         self.assertEqual(headers["x-content-type-options"], "nosniff")
         self.assertTrue(headers["x-request-id"])
+
+    def test_real_guilin_transit_routes_are_available(self) -> None:
+        data, _ = self.request("/api/transit/routes")
+        self.assertEqual(data["count"], 5)
+        self.assertEqual(data["total"], 5)
+        self.assertFalse(data["is_realtime_gps"])
+        self.assertEqual(data["trajectory_mode"], "simulated_on_real_route_geometry")
+        self.assertEqual({item["ref"] for item in data["items"]}, {"1", "10", "16", "23", "24"})
+        self.assertTrue(all(len(item["animation_path"]) >= 8 for item in data["items"]))
+
+        filtered, _ = self.request("/api/transit/routes?ref=1&ref=23")
+        self.assertEqual(filtered["count"], 2)
+        self.assertEqual({item["ref"] for item in filtered["items"]}, {"1", "23"})
+
+        route_id = filtered["items"][0]["id"]
+        detail, _ = self.request(f"/api/transit/routes/{route_id}")
+        self.assertEqual(detail["id"], route_id)
+        self.request("/api/transit/routes/not-a-route", expected_status=422)
+        self.request("/api/transit/routes/osm-999999999", expected_status=404)
 
     def test_validation_errors_are_consistent(self) -> None:
         data, _ = self.request("/api/snapshot?hour=99", expected_status=422)

@@ -4,6 +4,7 @@ __pycache__/
 .pytest_cache/
 .idea/
 .vscode/
+.firecrawl/
 .env
 *.log
 data/*.db

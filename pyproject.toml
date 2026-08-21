@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "bus-agent-fastapi"
-version = "1.1.0"
+version = "1.2.0"
 description = "公交文旅潮汐客流预测与弹性调度智能体"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -18,4 +18,4 @@ dependencies = [
 packages = ["app"]
 
 [tool.setuptools.package-data]
-app = ["templates/*.html", "static/*.js"]
+app = ["templates/*.html", "static/*.js", "data/*.json"]

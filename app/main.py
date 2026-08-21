@@ -18,14 +18,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import database, repository
+from . import database, repository, transit
 from .engine import LINES, SCENARIOS, SPOT_BY_ID, SPOTS, forecast, generate_actions, metrics_for, snapshot
 from .schemas import ExportCreate, ScenarioName, SimulationCreate, SimulationStatus
 from .settings import load_settings
 
 
 APP_DIR = FilePath(__file__).resolve().parent
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 logger = logging.getLogger("bus_agent")
 
 SimulationId = Annotated[
@@ -42,6 +42,7 @@ def utc_now() -> str:
 async def lifespan(_: FastAPI):
     load_settings()  # 启动时尽早暴露无效配置。
     database.init_db()
+    transit.load_routes()
     yield
 
 
@@ -88,7 +89,15 @@ async def request_guard_and_headers(request: Request, call_next):
         if body_size < 0:
             return finalize(JSONResponse(status_code=400, content={"detail": "Content-Length 无效"}))
         if body_size > settings.max_request_bytes:
-            return finalize(JSONResponse(status_code=413, content={"detail": "请求体过大"}))
+            # 明确关闭带有未读取请求体的连接，避免 HTTP/1.1 客户端把剩余上传数据
+            # 误认为下一次请求的一部分。
+            return finalize(
+                JSONResponse(
+                    status_code=413,
+                    content={"detail": "请求体过大"},
+                    headers={"Connection": "close"},
+                )
+            )
 
     response = await call_next(request)
     return finalize(response)
@@ -114,6 +123,12 @@ async def validation_error_handler(_: Request, exc: RequestValidationError) -> J
 async def corrupt_data_handler(_: Request, exc: repository.DataCorruptionError) -> JSONResponse:
     logger.error("数据库记录损坏", exc_info=(type(exc), exc, exc.__traceback__))
     return JSONResponse(status_code=500, content={"detail": "推演记录数据异常，请联系管理员"})
+
+
+@app.exception_handler(transit.TransitDataError)
+async def transit_data_handler(_: Request, exc: transit.TransitDataError) -> JSONResponse:
+    logger.error("公交线路快照异常", exc_info=(type(exc), exc, exc.__traceback__))
+    return JSONResponse(status_code=503, content={"detail": "公交线路数据暂不可用"})
 
 
 @app.exception_handler(sqlite3.Error)
@@ -144,12 +159,14 @@ def home() -> FileResponse:
 def health() -> dict:
     with database.connect() as connection:
         connection.execute("SELECT 1").fetchone()
+    route_count = transit.load_routes()["route_count"]
     return {
         "status": "ok",
         "database": "sqlite",
         "service": "bus-tourism-agent",
         "version": APP_VERSION,
         "checked_at": utc_now(),
+        "transit_route_count": route_count,
     }
 
 
@@ -168,7 +185,30 @@ def config() -> dict:
             "tile_attribution": html.escape(settings.map_tile_attribution),
             "max_zoom": settings.map_max_zoom,
         },
+        "transit": {
+            "endpoint": "/api/transit/routes",
+            "is_realtime_gps": False,
+            "trajectory_mode": "simulated_on_real_route_geometry",
+        },
     }
+
+
+@app.get("/api/transit/routes")
+def get_transit_routes(
+    ref: list[str] | None = Query(default=None, min_length=1, max_length=32),
+) -> dict:
+    selected_refs = {value.strip() for value in ref or [] if value.strip()}
+    return transit.list_routes(selected_refs or None)
+
+
+@app.get("/api/transit/routes/{route_id}")
+def get_transit_route(
+    route_id: Annotated[str, Path(pattern=r"^osm-[0-9]+$", max_length=32)],
+) -> dict:
+    route = transit.get_route(route_id)
+    if route is None:
+        raise HTTPException(status_code=404, detail="公交线路不存在")
+    return route
 
 
 @app.get("/api/snapshot")

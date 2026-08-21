@@ -36,6 +36,16 @@ class FrontendTests(unittest.TestCase):
         self.assertIn('aria-label="推演时刻"', self.html)
         self.assertIn("prefers-reduced-motion", self.html)
 
+    def test_real_transit_route_controls_and_trajectory_are_present(self) -> None:
+        self.assertIn('id="transitRouteSelect"', self.html)
+        self.assertIn('id="transitPlayBtn"', self.html)
+        self.assertIn('id="transitDirectionBtn"', self.html)
+        self.assertIn('id="transitSpeed"', self.html)
+        self.assertIn("不是官方实时 GPS", self.html)
+        self.assertIn('api("/api/transit/routes")', self.javascript)
+        self.assertIn("buildTransitSampler", self.javascript)
+        self.assertIn("transitTrailPoints", self.javascript)
+
 
 if __name__ == "__main__":
     unittest.main()

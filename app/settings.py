@@ -20,6 +20,7 @@ DEFAULT_TILE_ATTRIBUTION = "© OpenStreetMap contributors"
 @dataclass(frozen=True, slots=True)
 class Settings:
     database_path: Path
+    transit_route_data_path: Path
     map_tile_url: str
     map_tile_attribution: str
     map_max_zoom: int
@@ -29,6 +30,15 @@ class Settings:
 def _database_path(value: str | None) -> Path:
     if not value:
         return PROJECT_ROOT / "data" / "bus_agent.db"
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    return path.resolve()
+
+
+def _project_path(value: str | None, default: Path) -> Path:
+    if not value:
+        return default
     path = Path(value).expanduser()
     if not path.is_absolute():
         path = PROJECT_ROOT / path
@@ -71,6 +81,10 @@ def load_settings() -> Settings:
 
     return Settings(
         database_path=_database_path(os.getenv("BUS_AGENT_DB_PATH")),
+        transit_route_data_path=_project_path(
+            os.getenv("TRANSIT_ROUTE_DATA_PATH"),
+            PROJECT_ROOT / "app" / "data" / "guilin_bus_routes.json",
+        ),
         map_tile_url=_tile_url(os.getenv("MAP_TILE_URL")),
         map_tile_attribution=attribution,
         map_max_zoom=_bounded_int("MAP_MAX_ZOOM", 19, 8, 22),

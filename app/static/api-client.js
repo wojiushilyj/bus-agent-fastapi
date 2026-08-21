@@ -29,6 +29,15 @@
   const serviceText = document.getElementById("serviceText");
   const dataTime = document.getElementById("dataTime");
   const historyDetail = document.getElementById("historyDetail");
+  const transitControl = document.getElementById("transitControl");
+  const transitRouteSelect = document.getElementById("transitRouteSelect");
+  const transitPlayBtn = document.getElementById("transitPlayBtn");
+  const transitDirectionBtn = document.getElementById("transitDirectionBtn");
+  const transitSpeed = document.getElementById("transitSpeed");
+  const transitProgressBar = document.getElementById("transitProgressBar");
+  const transitProgressText = document.getElementById("transitProgressText");
+  const transitStatus = document.getElementById("transitStatus");
+  const transitSource = document.getElementById("transitSource");
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   let geoMap = null;
@@ -42,6 +51,21 @@
   let stageTimer = null;
   let evaluationTimer = null;
   let healthTimer = null;
+  let transitRouteLayer = null;
+  let transitVehicleLayer = null;
+  let transitTrailLayer = null;
+  let transitRoutes = [];
+  let activeTransitRoute = null;
+  let transitSampler = null;
+  let transitMarkers = [];
+  let transitTrail = null;
+  let transitTrailPoints = [];
+  let transitAnimationFrame = null;
+  let transitLastFrame = null;
+  let transitProgress = 0;
+  let transitRunning = false;
+  let transitReverse = false;
+  let transitResumeAfterVisibility = false;
 
   async function api(path, options) {
     const requestOptions = options || {};
@@ -208,6 +232,9 @@
 
     geoCongestionLayer = L.layerGroup().addTo(geoMap);
     geoVehicleLayer = L.layerGroup().addTo(geoMap);
+    transitRouteLayer = L.layerGroup().addTo(geoMap);
+    transitTrailLayer = L.layerGroup().addTo(geoMap);
+    transitVehicleLayer = L.layerGroup().addTo(geoMap);
     config.lines.forEach(function (line) {
       geoLines[line.id] = L.polyline(line.route, {
         color: line.color,
@@ -243,6 +270,7 @@
       mapNote.textContent = schematic
         ? "线网示意图（离线降级视图）"
         : "真实地理底图 · 点击站点查看预测曲线";
+      if (schematic && transitRunning) pauseTransit();
       if (!schematic) setTimeout(function () { geoMap.invalidateSize(); }, 0);
     };
     updateGeoLineStyles();
@@ -269,6 +297,10 @@
       let color = line.color;
       let opacity = 0.78;
       let weight = 4;
+      if (activeTransitRoute) {
+        opacity = 0.22;
+        weight = 3;
+      }
       if (compareMode !== "off") {
         color = loadColor(compareMode === "before" ? lineLoadBefore(line.id) : lineLoadAfter(line.id));
         opacity = 0.95;
@@ -311,6 +343,233 @@
       route[index][1] + (route[index + 1][1] - route[index][1]) * local,
     ];
   }
+
+  function geoDistanceMeters(first, second) {
+    const radians = Math.PI / 180;
+    const latitude1 = first[0] * radians;
+    const latitude2 = second[0] * radians;
+    const latitudeDelta = (second[0] - first[0]) * radians;
+    const longitudeDelta = (second[1] - first[1]) * radians;
+    const value = Math.sin(latitudeDelta / 2) ** 2 + Math.cos(latitude1) * Math.cos(latitude2) *
+      Math.sin(longitudeDelta / 2) ** 2;
+    return 6371000 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+  }
+
+  function buildTransitSampler(points) {
+    if (!Array.isArray(points) || points.length < 2) return null;
+    const cumulative = [0];
+    for (let index = 1; index < points.length; index += 1) {
+      cumulative.push(cumulative[index - 1] + geoDistanceMeters(points[index - 1], points[index]));
+    }
+    const total = cumulative[cumulative.length - 1];
+    if (!Number.isFinite(total) || total <= 0) return null;
+    return {
+      distance: total,
+      pointAt: function (rawProgress) {
+        const progress = Math.max(0, Math.min(1, rawProgress));
+        const target = progress * total;
+        let low = 0;
+        let high = cumulative.length - 1;
+        while (low + 1 < high) {
+          const middle = Math.floor((low + high) / 2);
+          if (cumulative[middle] <= target) low = middle;
+          else high = middle;
+        }
+        const segmentLength = cumulative[high] - cumulative[low];
+        const local = segmentLength > 0 ? (target - cumulative[low]) / segmentLength : 0;
+        return [
+          points[low][0] + (points[high][0] - points[low][0]) * local,
+          points[low][1] + (points[high][1] - points[low][1]) * local,
+        ];
+      },
+    };
+  }
+
+  function transitDisplayProgress(progress) {
+    return transitReverse ? 1 - progress : progress;
+  }
+
+  function updateTransitProgress() {
+    const displayed = transitDisplayProgress(transitProgress);
+    const percent = Math.round(displayed * 100);
+    transitProgressBar.style.width = percent + "%";
+    transitProgressText.textContent = percent + "%";
+  }
+
+  function ensureTransitMarkers() {
+    if (!transitVehicleLayer || transitMarkers.length) return;
+    ["主车", "跟车一", "跟车二"].forEach(function (label) {
+      const marker = L.marker([0, 0], {
+        interactive: false,
+        opacity: 0,
+        icon: L.divIcon({
+          className: "transit-bus",
+          html: '<span aria-hidden="true">🚌</span>',
+          iconSize: [26, 26],
+        }),
+      }).addTo(transitVehicleLayer);
+      marker._transitLabel = label;
+      transitMarkers.push(marker);
+    });
+  }
+
+  function renderTransitFrame() {
+    if (!transitSampler) return;
+    ensureTransitMarkers();
+    const offsets = [0, 0.34, 0.68];
+    offsets.forEach(function (offset, index) {
+      const logical = (transitProgress + offset) % 1;
+      const position = transitSampler.pointAt(transitDisplayProgress(logical));
+      transitMarkers[index].setLatLng(position).setOpacity(index === 0 ? 1 : 0.78);
+    });
+    const primaryPosition = transitSampler.pointAt(transitDisplayProgress(transitProgress));
+    transitTrailPoints.push(primaryPosition);
+    if (transitTrailPoints.length > 48) transitTrailPoints.shift();
+    if (!transitTrail) {
+      transitTrail = L.polyline(transitTrailPoints, {
+        color: activeTransitRoute ? activeTransitRoute.color : "#1677ff",
+        weight: 5,
+        opacity: 0.52,
+        dashArray: "3 7",
+        lineCap: "round",
+      }).addTo(transitTrailLayer);
+    } else {
+      transitTrail.setLatLngs(transitTrailPoints);
+    }
+    updateTransitProgress();
+  }
+
+  function pauseTransit(resetProgress) {
+    if (transitAnimationFrame) cancelAnimationFrame(transitAnimationFrame);
+    transitAnimationFrame = null;
+    transitLastFrame = null;
+    transitRunning = false;
+    transitPlayBtn.textContent = "▶ 运行轨迹";
+    if (resetProgress) {
+      transitProgress = 0;
+      transitTrailPoints = [];
+      if (transitTrailLayer) transitTrailLayer.clearLayers();
+      transitTrail = null;
+      if (transitSampler) renderTransitFrame();
+      else updateTransitProgress();
+    }
+  }
+
+  function startTransit() {
+    if (!transitSampler || !activeTransitRoute || mapWrap.classList.contains("force-schematic")) return;
+    if (reduceMotion) {
+      transitProgress = (transitProgress + 0.08) % 1;
+      transitTrailPoints = [];
+      if (transitTrailLayer) transitTrailLayer.clearLayers();
+      transitTrail = null;
+      renderTransitFrame();
+      transitStatus.textContent = "系统已启用减少动态：点击运行轨迹可逐段查看车辆位置";
+      return;
+    }
+    if (transitRunning) return;
+    transitRunning = true;
+    transitPlayBtn.textContent = "❚❚ 暂停轨迹";
+    function animate(now) {
+      if (!transitRunning) return;
+      if (transitLastFrame !== null) {
+        const speed = Number(transitSpeed.value) || 1;
+        const previous = transitProgress;
+        transitProgress = (transitProgress + ((now - transitLastFrame) / 28000) * speed) % 1;
+        if (transitProgress < previous) {
+          transitTrailPoints = [];
+          if (transitTrailLayer) transitTrailLayer.clearLayers();
+          transitTrail = null;
+        }
+      }
+      transitLastFrame = now;
+      renderTransitFrame();
+      transitAnimationFrame = requestAnimationFrame(animate);
+    }
+    transitAnimationFrame = requestAnimationFrame(animate);
+  }
+
+  function selectTransitRoute(routeId, fitRoute) {
+    const route = transitRoutes.find(function (item) { return item.id === routeId; });
+    if (!route || !geoMap || !transitRouteLayer) return;
+    pauseTransit(false);
+    transitRouteLayer.clearLayers();
+    transitTrailLayer.clearLayers();
+    transitVehicleLayer.clearLayers();
+    transitMarkers = [];
+    transitTrail = null;
+    transitTrailPoints = [];
+    transitProgress = 0;
+    activeTransitRoute = route;
+    transitSampler = buildTransitSampler(route.animation_path);
+    const bounds = [];
+    route.paths.forEach(function (path) {
+      path.forEach(function (point) { bounds.push(point); });
+      L.polyline(path, {
+        color: "#ffffff",
+        weight: 9,
+        opacity: 0.9,
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(transitRouteLayer);
+      L.polyline(path, {
+        color: route.color,
+        weight: 5,
+        opacity: 0.94,
+        lineCap: "round",
+        lineJoin: "round",
+      }).addTo(transitRouteLayer);
+    });
+    const start = route.animation_path[0];
+    const end = route.animation_path[route.animation_path.length - 1];
+    L.circleMarker(start, {
+      radius: 6, color: route.color, weight: 3, fillColor: "#ffffff", fillOpacity: 1,
+    }).addTo(transitRouteLayer).bindTooltip("起点 · " + escapeHtml(route.from));
+    L.circleMarker(end, {
+      radius: 6, color: route.color, weight: 3, fillColor: route.color, fillOpacity: 1,
+    }).addTo(transitRouteLayer).bindTooltip("终点 · " + escapeHtml(route.to));
+    transitRouteSelect.value = route.id;
+    transitStatus.textContent = route.ref + "路 · " + route.from + " → " + route.to +
+      " · 线路约 " + (transitSampler.distance / 1000).toFixed(1) + " km";
+    transitDirectionBtn.textContent = transitReverse ? "⇄ 正向" : "⇄ 反向";
+    renderTransitFrame();
+    updateGeoLineStyles();
+    if (fitRoute && bounds.length) geoMap.fitBounds(bounds, { padding: [48, 48], maxZoom: 14 });
+  }
+
+  async function refreshTransitRoutes() {
+    const data = await api("/api/transit/routes");
+    if (!Array.isArray(data.items) || !data.items.length) throw new Error("未找到可绘制的桂林公交线路");
+    transitRoutes = data.items;
+    transitRouteSelect.innerHTML = transitRoutes.map(function (route) {
+      return '<option value="' + escapeHtml(route.id) + '">' + escapeHtml(
+        route.ref + "路｜" + route.from + " → " + route.to
+      ) + "</option>";
+    }).join("");
+    transitControl.hidden = !geoMap;
+    const timestamp = formatLocalTime(data.osm_base_timestamp || data.generated_at, true);
+    transitSource.textContent = data.attribution + " · ODbL · 数据快照 " + timestamp +
+      "；车辆位置为轨迹推演，不是官方实时 GPS";
+    selectTransitRoute(transitRoutes[0].id, true);
+  }
+
+  transitRouteSelect.addEventListener("change", function () {
+    selectTransitRoute(transitRouteSelect.value, true);
+  });
+  transitPlayBtn.addEventListener("click", function () {
+    if (transitRunning) pauseTransit(false);
+    else startTransit();
+  });
+  transitDirectionBtn.addEventListener("click", function () {
+    const wasRunning = transitRunning;
+    pauseTransit(false);
+    transitReverse = !transitReverse;
+    transitDirectionBtn.textContent = transitReverse ? "⇄ 正向" : "⇄ 反向";
+    transitTrailPoints = [];
+    if (transitTrailLayer) transitTrailLayer.clearLayers();
+    transitTrail = null;
+    renderTransitFrame();
+    if (wasRunning) startTransit();
+  });
 
   function stopGeoVehicles() {
     if (geoVehicleFrame) cancelAnimationFrame(geoVehicleFrame);
@@ -359,6 +618,7 @@
   };
   resetState = function (full) {
     stopGeoVehicles();
+    pauseTransit(true);
     originalResetState(full);
     updateGeoLineStyles();
     updateGeoCongestion();
@@ -664,8 +924,14 @@
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) {
       stopGeoVehicles();
+      transitResumeAfterVisibility = transitRunning;
+      pauseTransit(false);
     } else if (dispatched) {
       startGeoVehicles();
+    }
+    if (!document.hidden && transitResumeAfterVisibility) {
+      transitResumeAfterVisibility = false;
+      startTransit();
     }
   });
 
@@ -692,10 +958,15 @@
         refreshSnapshot(),
         refreshForecast(),
         refreshHistory(),
+        refreshTransitRoutes(),
       ]);
       if (dataResults[0].status === "rejected") reportConnectionError(dataResults[0].reason);
       if (dataResults[1].status === "rejected") reportConnectionError(dataResults[1].reason);
       if (dataResults[2].status === "rejected") reportHistoryError(dataResults[2].reason);
+      if (dataResults[3].status === "rejected") {
+        transitControl.hidden = !geoMap;
+        transitStatus.textContent = "真实公交线路加载失败：" + dataResults[3].reason.message;
+      }
       healthTimer = setInterval(checkHealth, 30000);
     } catch (error) {
       reportConnectionError(error);
@@ -707,6 +978,7 @@
   window.addEventListener("beforeunload", function () {
     clearWorkflowTimers();
     stopGeoVehicles();
+    pauseTransit(false);
     clearTimeout(tileFallbackTimer);
     if (healthTimer) clearInterval(healthTimer);
   });

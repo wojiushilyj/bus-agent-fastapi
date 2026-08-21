@@ -74,8 +74,21 @@
   .geo-spot-label{background:rgba(255,255,255,.92);border:1px solid #d7dee8;border-radius:5px;color:#1f2d3d;font-size:10px;font-weight:600;padding:2px 5px;box-shadow:0 1px 4px rgba(31,45,61,.15);}
   .geo-spot-label::before{display:none;}
   .geo-bus{font-size:17px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.35));transform:translate(-3px,-4px);}
+  .transit-bus{font-size:19px;filter:drop-shadow(0 2px 3px rgba(0,0,0,.42));transform:translate(-4px,-5px);}
   .geo-congestion-pulse{animation:geoPulse 2.4s ease-in-out infinite;transform-origin:center;}
   @keyframes geoPulse{0%,100%{fill-opacity:.12;stroke-opacity:.7;}50%{fill-opacity:.28;stroke-opacity:1;}}
+  .transit-control{position:absolute;top:46px;left:54px;z-index:710;width:min(390px,calc(100% - 160px));background:rgba(255,255,255,.94);border:1px solid rgba(215,222,232,.95);border-radius:9px;padding:8px 10px;box-shadow:0 3px 12px rgba(31,45,61,.13);backdrop-filter:blur(5px);}
+  .transit-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  .transit-row+.transit-row{margin-top:6px;}
+  .transit-control label{font-size:10.5px;font-weight:700;color:var(--ink);}
+  #transitRouteSelect,#transitSpeed{min-width:150px;flex:1;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:4px 6px;font-size:10.5px;}
+  #transitSpeed{min-width:58px;max-width:68px;}
+  .transit-btn{border:1px solid var(--line);background:#fff;color:var(--brand);border-radius:6px;padding:4px 7px;font-size:10.5px;cursor:pointer;}
+  .transit-btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;}
+  .transit-track{height:5px;flex:1;min-width:90px;background:#e8edf4;border-radius:4px;overflow:hidden;}
+  .transit-track>i{display:block;width:0;height:100%;background:linear-gradient(90deg,var(--brand2),var(--brand));border-radius:4px;transition:width .12s linear;}
+  .transit-status{font-size:9.5px;color:var(--sub);line-height:1.35;}
+  .transit-source{color:#7b8794;}
   .panel-right{display:flex;flex-direction:column;gap:12px;}
   .box-r{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fcfdff;}
   .box-r h4{font-size:13.5px;margin-bottom:9px;display:flex;align-items:center;gap:6px;}
@@ -198,7 +211,8 @@
     #printSheet{display:block!important;}
     @page{size:A4;margin:14mm;}
   }
-  @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr);}.cmd{grid-template-columns:1fr;}.twocol,.land,.layer{grid-template-columns:1fr;}.mapwrap{min-height:430px;}.maplegend{top:46px;right:8px;}.maphead{left:48px;}}
+  @media(max-width:980px){.cards{grid-template-columns:repeat(3,1fr);}.cmd{grid-template-columns:1fr;}.twocol,.land,.layer{grid-template-columns:1fr;}.mapwrap{min-height:430px;}.maplegend{top:46px;right:8px;}.maphead{left:48px;}.transit-control{left:48px;width:min(360px,calc(100% - 160px));}}
+  @media(max-width:680px){.transit-control{left:8px;top:78px;width:calc(100% - 16px);}.maplegend{display:none;}}
   @media(max-width:680px){.history-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.cards{grid-template-columns:repeat(2,1fr);}}
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important;}}
 </style>
@@ -309,6 +323,21 @@
         </div>
         <div id="geoMap" role="region" aria-label="桂林至阳朔文旅公交真实底图"></div>
         <svg id="map" viewBox="0 0 680 470" width="100%" role="img" aria-label="桂林至阳朔文旅公交线网示意图"></svg>
+        <div class="transit-control" id="transitControl" hidden>
+          <div class="transit-row">
+            <label for="transitRouteSelect">桂林真实公交</label>
+            <select id="transitRouteSelect" aria-label="选择桂林公交线路"></select>
+          </div>
+          <div class="transit-row">
+            <button class="transit-btn primary" id="transitPlayBtn" type="button">▶ 运行轨迹</button>
+            <button class="transit-btn" id="transitDirectionBtn" type="button">⇄ 反向</button>
+            <select id="transitSpeed" aria-label="轨迹播放速度"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+            <div class="transit-track" aria-hidden="true"><i id="transitProgressBar"></i></div>
+            <span id="transitProgressText">0%</span>
+          </div>
+          <div class="transit-status" id="transitStatus" role="status" aria-live="polite">正在读取真实线路…</div>
+          <div class="transit-status transit-source" id="transitSource">开放地图线路几何；车辆位置为轨迹推演，不是官方实时 GPS</div>
+        </div>
         <button id="mapModeBtn" type="button" disabled>底图加载中</button>
         <div class="mapnote" id="mapNote">正在加载真实底图，失败时自动使用线网示意图</div>
       </div>
